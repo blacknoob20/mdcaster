@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"docx-to-md/internal/converter"
+	"mdcaster/internal/converter"
 
 	"github.com/fatih/color"
 )
@@ -19,8 +19,8 @@ const (
 	version = "1.0.0"
 	banner  = `
 ╔═══════════════════════════════════════════════════════════════╗
-║                     DOCX to Markdown                          ║
-║              Convertidor de Alta Velocidad                    ║
+║                     Markdown Caster                           ║
+║            Convertidor de Múltiples Formatos                  ║
 ║                    Powered by Go 🚀                           ║
 ╚═══════════════════════════════════════════════════════════════╝
 `
@@ -348,18 +348,18 @@ func formatDuration(d time.Duration) string {
 
 // printHelp muestra la ayuda completa
 func printHelp() {
-	info.Println("DOCX to Markdown Converter - Herramienta de conversión de alta velocidad")
+	info.Println("Markdown Caster - Convertidor universal de múltiples formatos a Markdown")
 	fmt.Println()
 	fmt.Println("DESCRIPCIÓN:")
-	fmt.Println("  Convierte archivos Word (.docx) a formato Markdown (.md) utilizando")
-	fmt.Println("  procesamiento concurrente para máxima velocidad.")
+	fmt.Println("  Convierte archivos de múltiples formatos (DOCX, PDF, etc.) a formato Markdown")
+	fmt.Println("  utilizando procesamiento concurrente para máxima velocidad.")
 	fmt.Println("  Incluye verificación de integridad del contenido para garantizar que")
 	fmt.Println("  todo el texto del archivo origen se encuentre en el archivo generado.")
 	fmt.Println()
 	printUsage()
 	fmt.Println()
 	fmt.Println("OPCIONES:")
-	fmt.Println("  -i, --input    Archivo DOCX o carpeta con archivos DOCX a convertir")
+	fmt.Println("  -i, --input    Archivo o carpeta con archivos soportados a convertir")
 	fmt.Println("  -o, --output   Carpeta de destino para archivos convertidos (default: 'converted')")
 	fmt.Println("  -w, --workers  Número de workers paralelos (default: número de CPUs)")
 	fmt.Println("      --version  Mostrar versión del programa")
@@ -373,16 +373,16 @@ func printHelp() {
 	fmt.Println()
 	fmt.Println("EJEMPLOS:")
 	fmt.Println("  # Convertir un archivo específico")
-	fmt.Println("  docx-to-md -i documento.docx")
+	fmt.Println("  mdcaster -i documento.docx")
 	fmt.Println()
 	fmt.Println("  # Convertir todos los archivos de una carpeta")
-	fmt.Println("  docx-to-md -i ./documentos")
+	fmt.Println("  mdcaster -i ./documentos")
 	fmt.Println()
 	fmt.Println("  # Especificar carpeta de salida")
-	fmt.Println("  docx-to-md -i ./documentos -o ./markdown")
+	fmt.Println("  mdcaster -i ./documentos -o ./markdown")
 	fmt.Println()
 	fmt.Println("  # Usar 8 workers paralelos")
-	fmt.Println("  docx-to-md -i ./documentos -w 8")
+	fmt.Println("  mdcaster -i ./documentos -w 8")
 }
 
 // printUsage muestra el uso básico

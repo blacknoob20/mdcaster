@@ -1,18 +1,19 @@
-# DOCX to Markdown Converter
+# Markdown Caster
 
 <p align="center">
-  <strong>🚀 Convertidor de alta velocidad de Word a Markdown</strong>
+  <strong>🚀 Convertidor universal de múltiples formatos a Markdown</strong>
 </p>
 
 <p align="center">
-  Convierte archivos `.docx` a formato Markdown utilizando concurrencia para máximo rendimiento.
+  Convierte archivos de múltiples formatos (`.docx`, `.pdf`, etc.) a formato Markdown utilizando concurrencia para máximo rendimiento.
 </p>
 
 ---
 
 ## 📝 Características del Convertidor
 
-- **Extrae TODO el contenido**: Párrafos, encabezados, listas, y contenido de tablas Word como texto formateado
+- **Soporte múltiple**: Convierte archivos de múltiples formatos a Markdown (DOCX, PDF, etc.)
+- **Extrae TODO el contenido**: Párrafos, encabezados, listas, y contenido de tablas como texto formateado
 - **Formato Markdown limpio**: Sin tablas Markdown complejas, solo texto fácil de leer
 - **Preserva estilos**: Negrita, cursiva, encabezados y listas se mantienen
 - **Concurrencia inteligente**: Goroutines para procesamiento paralelo ultra-rápido
@@ -34,16 +35,16 @@
 
 ```bash
 # Clonar o navegar al directorio del proyecto
-cd docx-to-md
+cd mdcaster
 
 # Descargar dependencias
 go mod tidy
 
 # Compilar
-go build -o docx-to-md ./cmd/docx-to-md
+go build -o mdcaster ./cmd/mdcaster
 
 # O instalar globalmente
-go install ./cmd/docx-to-md
+go install ./cmd/mdcaster
 ```
 
 ## 🚀 Uso
@@ -52,34 +53,34 @@ go install ./cmd/docx-to-md
 
 ```bash
 # Convertir un archivo específico
-./docx-to-md -i documento.docx
+./mdcaster -i documento.docx
 
 # Convertir todos los archivos de una carpeta
-./docx-to-md -i ./word
+./mdcaster -i ./documentos
 
 # También funciona sin flags
-./docx-to-md documento.docx
-./docx-to-md ./word
+./mdcaster documento.docx
+./mdcaster ./documentos
 ```
 
 ### Opciones Avanzadas
 
 ```bash
 # Especificar carpeta de salida
-./docx-to-md -i ./word -o ./markdown
+./mdcaster -i ./documentos -o ./markdown
 
 # Usar número específico de workers
-./docx-to-md -i ./word -w 8
+./mdcaster -i ./documentos -w 8
 
 # Combinar opciones
-./docx-to-md -i ./documentos -o ./salida -w 4
+./mdcaster -i ./documentos -o ./salida -w 4
 ```
 
 ### Flags Disponibles
 
 | Flag | Corto | Descripción | Default |
 |------|-------|-------------|---------|
-| `--input` | `-i` | Archivo DOCX o carpeta de entrada | - |
+| `--input` | `-i` | Archivo o carpeta de entrada | - |
 | `--output` | `-o` | Carpeta de destino | `converted` |
 | `--workers` | `-w` | Número de workers paralelos | CPUs |
 | `--version` | - | Mostrar versión | - |
@@ -89,13 +90,13 @@ go install ./cmd/docx-to-md
 
 ```
 ╔═══════════════════════════════════════════════════════════════╗
-║                     DOCX to Markdown                          ║
-║              Convertidor de Alta Velocidad                    ║
+║                     Markdown Caster                           ║
+║            Convertidor de Múltiples Formatos                  ║
 ║                    Powered by Go 🚀                           ║
 ╚═══════════════════════════════════════════════════════════════╝
 
-📁 Escaneando carpeta: ./word
-📂 Carpeta de salida: ./word/converted
+📁 Escaneando carpeta: ./documentos
+📂 Carpeta de salida: ./documentos/converted
 📄 Archivos a procesar: 10
 ⚡ Workers paralelos: 8
 
@@ -149,19 +150,19 @@ La conversión preserva los siguientes elementos:
 - ✅ **Texto tachado**
 - ✅ **Listas con viñetas**
 - ✅ **Saltos de línea**
-- ✅ **Contenido de tablas Word extraído como párrafos** (para mejor legibilidad)
+- ✅ **Contenido de tablas extraído como párrafos** (para mejor legibilidad)
 
 ## 📁 Estructura del Proyecto
 
 ```
-docx-to-md/
+mdcaster/
 ├── cmd/
-│   └── docx-to-md/
+│   └── mdcaster/
 │       └── main.go          # Punto de entrada
 ├── internal/
 │   └── converter/
 │       └── converter.go     # Lógica de conversión
-├── word/                    # Archivos DOCX de entrada
+├── word/                    # Archivos de entrada
 ├── converted/               # Archivos MD convertidos
 ├── go.mod                   # Módulo Go
 ├── go.sum                   # Checksums de dependencias

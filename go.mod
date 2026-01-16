@@ -1,4 +1,4 @@
-module docx-to-md
+module mdcaster
 
 go 1.21
 
