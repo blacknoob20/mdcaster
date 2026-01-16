@@ -1,19 +1,24 @@
 package converter
 
 import (
+	"archive/zip"
+	"encoding/xml"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
 // ConversionResult representa el resultado de una conversión
 type ConversionResult struct {
-	SourceFile string
-	OutputFile string
-	Success    bool
-	Error      error
-	Duration   float64
+	SourceFile       string
+	OutputFile       string
+	Success          bool
+	Error            error
+	Duration         float64
+	IntegrityPercent float64 // Porcentaje de contenido que se encontró en el markdown
 }
 
 // Converter es un dispatcher que utiliza la factory para procesar diferentes tipos de archivos
@@ -36,6 +41,122 @@ func (c *Converter) Convert(inputPath, outputPath string) error {
 // ConvertFile es un alias para mantener compatibilidad hacia atrás
 func (c *Converter) ConvertFile(inputPath, outputPath string) error {
 	return c.Convert(inputPath, outputPath)
+}
+
+// CheckIntegrity verifica qué porcentaje del contenido original se encuentra en el markdown
+func CheckIntegrity(sourceFile, markdownFile string) float64 {
+	// Leer el contenido original del DOCX
+	originalContent, err := extractDocxContent(sourceFile)
+	if err != nil {
+		return 0
+	}
+
+	// Leer el contenido del markdown generado
+	markdownContent, err := os.ReadFile(markdownFile)
+	if err != nil {
+		return 0
+	}
+
+	// Normalizar espacios para comparación
+	original := normalizeContent(originalContent)
+	markdown := normalizeContent(string(markdownContent))
+
+	// Si no hay contenido original, no se puede verificar
+	if len(original) == 0 {
+		return 100
+	}
+
+	// Contar cuántas palabras del original se encuentran en el markdown
+	originalWords := strings.Fields(original)
+	foundCount := 0
+
+	for _, word := range originalWords {
+		if strings.Contains(markdown, word) {
+			foundCount++
+		}
+	}
+
+	if len(originalWords) == 0 {
+		return 100
+	}
+
+	percent := float64(foundCount) / float64(len(originalWords)) * 100
+	return percent
+}
+
+// extractDocxContent extrae todo el contenido de texto de un archivo DOCX
+func extractDocxContent(docxPath string) (string, error) {
+	reader, err := zip.OpenReader(docxPath)
+	if err != nil {
+		return "", err
+	}
+	defer reader.Close()
+
+	var documentContent []byte
+
+	// Buscar el documento principal
+	for _, file := range reader.File {
+		if file.Name == "word/document.xml" {
+			rc, err := file.Open()
+			if err != nil {
+				return "", err
+			}
+			documentContent, _ = io.ReadAll(rc)
+			rc.Close()
+			break
+		}
+	}
+
+	if documentContent == nil {
+		return "", fmt.Errorf("no se encontró document.xml")
+	}
+
+	// Extraer solo el texto del XML
+	return extractTextFromXML(string(documentContent)), nil
+}
+
+// extractTextFromXML extrae el texto de los elementos <w:t> del XML
+func extractTextFromXML(xmlContent string) string {
+	var text strings.Builder
+	decoder := xml.NewDecoder(strings.NewReader(xmlContent))
+
+	for {
+		token, err := decoder.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			break
+		}
+
+		switch t := token.(type) {
+		case xml.StartElement:
+			if t.Name.Local == "t" {
+				// Leer el siguiente token que será el texto
+				token, err := decoder.Token()
+				if err == nil {
+					if charData, ok := token.(xml.CharData); ok {
+						text.Write(charData)
+						text.WriteString(" ")
+					}
+				}
+			}
+		}
+	}
+
+	return text.String()
+}
+
+// normalizeContent normaliza el contenido para comparación
+func normalizeContent(content string) string {
+	// Convertir a minúsculas
+	content = strings.ToLower(content)
+	// Eliminar caracteres especiales pero mantener espacios
+	re := regexp.MustCompile(`[^a-z0-9\s]`)
+	content = re.ReplaceAllString(content, "")
+	// Normalizar espacios en blanco
+	content = strings.Join(strings.Fields(content), " ")
+	return content
 }
 
 // ConvertPDFFile es un alias para mantener compatibilidad hacia atrás

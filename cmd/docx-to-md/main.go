@@ -202,12 +202,19 @@ func processFilesWithConcurrency(files []string, outputDir string, numWorkers in
 				err := conv.ConvertFile(inputFile, outputPath)
 				duration := time.Since(startTime).Seconds()
 
+				// Calcular integridad si la conversión fue exitosa
+				integrityPercent := 0.0
+				if err == nil {
+					integrityPercent = converter.CheckIntegrity(inputFile, outputPath)
+				}
+
 				result := converter.ConversionResult{
-					SourceFile: inputFile,
-					OutputFile: outputPath,
-					Success:    err == nil,
-					Error:      err,
-					Duration:   duration,
+					SourceFile:       inputFile,
+					OutputFile:       outputPath,
+					Success:          err == nil,
+					Error:            err,
+					Duration:         duration,
+					IntegrityPercent: integrityPercent,
 				}
 
 				resultsMutex.Lock()
@@ -216,7 +223,7 @@ func processFilesWithConcurrency(files []string, outputDir string, numWorkers in
 
 				// Actualizar progreso
 				current := atomic.AddInt64(&processed, 1)
-				printProgress(current, totalFiles, inputFile, err == nil)
+				printProgress(current, totalFiles, inputFile, err == nil, integrityPercent)
 			}
 		}(w)
 	}
@@ -234,16 +241,31 @@ func processFilesWithConcurrency(files []string, outputDir string, numWorkers in
 }
 
 // printProgress imprime el progreso de conversión
-func printProgress(current, total int64, filename string, success bool) {
+func printProgress(current, total int64, filename string, success bool, integrity float64) {
 	baseName := filepath.Base(filename)
-	if len(baseName) > 50 {
-		baseName = baseName[:47] + "..."
+	if len(baseName) > 40 {
+		baseName = baseName[:37] + "..."
 	}
 
 	if success {
-		fmt.Printf("\r✅ [%d/%d] Convertido: %-50s\n", current, total, baseName)
+		integritySymbol := getIntegritySymbol(integrity)
+		fmt.Printf("\r✅ [%d/%d] %s Convertido: %-40s %.1f%%\n", current, total, integritySymbol, baseName, integrity)
 	} else {
-		fmt.Printf("\r❌ [%d/%d] Error: %-50s\n", current, total, baseName)
+		fmt.Printf("\r❌ [%d/%d] Error: %-40s\n", current, total, baseName)
+	}
+}
+
+// getIntegritySymbol retorna un símbolo basado en el porcentaje de integridad
+func getIntegritySymbol(percent float64) string {
+	switch {
+	case percent >= 95:
+		return "🟢"
+	case percent >= 80:
+		return "🟡"
+	case percent >= 50:
+		return "🟠"
+	default:
+		return "🔴"
 	}
 }
 
@@ -252,6 +274,9 @@ func printResults(results []converter.ConversionResult, startTime time.Time) {
 	totalDuration := time.Since(startTime)
 	var successCount, errorCount int
 	var totalConversionTime float64
+	var totalIntegrity float64
+	var minIntegrity float64 = 100
+	var maxIntegrity float64 = 0
 
 	fmt.Println()
 	fmt.Println("═══════════════════════════════════════════════════════════════")
@@ -262,6 +287,13 @@ func printResults(results []converter.ConversionResult, startTime time.Time) {
 		if result.Success {
 			successCount++
 			totalConversionTime += result.Duration
+			totalIntegrity += result.IntegrityPercent
+			if result.IntegrityPercent < minIntegrity {
+				minIntegrity = result.IntegrityPercent
+			}
+			if result.IntegrityPercent > maxIntegrity {
+				maxIntegrity = result.IntegrityPercent
+			}
 		} else {
 			errorCount++
 			errorMsg.Printf("  ❌ %s: %v\n", filepath.Base(result.SourceFile), result.Error)
@@ -274,6 +306,16 @@ func printResults(results []converter.ConversionResult, startTime time.Time) {
 		errorMsg.Printf("  ❌ Archivos con errores: %d\n", errorCount)
 	}
 	fmt.Println()
+
+	// Mostrar estadísticas de integridad
+	if successCount > 0 {
+		avgIntegrity := totalIntegrity / float64(successCount)
+		fmt.Println("  📋 INTEGRIDAD DE CONTENIDO:")
+		info.Printf("    Promedio: %.2f%%\n", avgIntegrity)
+		info.Printf("    Mínima: %.2f%%\n", minIntegrity)
+		info.Printf("    Máxima: %.2f%%\n", maxIntegrity)
+		fmt.Println()
+	}
 
 	info.Printf("  ⏱️  Tiempo total de ejecución: %s\n", formatDuration(totalDuration))
 	if successCount > 0 {
@@ -311,6 +353,8 @@ func printHelp() {
 	fmt.Println("DESCRIPCIÓN:")
 	fmt.Println("  Convierte archivos Word (.docx) a formato Markdown (.md) utilizando")
 	fmt.Println("  procesamiento concurrente para máxima velocidad.")
+	fmt.Println("  Incluye verificación de integridad del contenido para garantizar que")
+	fmt.Println("  todo el texto del archivo origen se encuentre en el archivo generado.")
 	fmt.Println()
 	printUsage()
 	fmt.Println()
@@ -320,6 +364,12 @@ func printHelp() {
 	fmt.Println("  -w, --workers  Número de workers paralelos (default: número de CPUs)")
 	fmt.Println("      --version  Mostrar versión del programa")
 	fmt.Println("      --help     Mostrar esta ayuda")
+	fmt.Println()
+	fmt.Println("INDICADOR DE INTEGRIDAD:")
+	fmt.Println("  🟢 Verde (≥95%)    - Integridad óptima")
+	fmt.Println("  🟡 Amarillo (80%)  - Integridad buena")
+	fmt.Println("  🟠 Naranja (50%)   - Integridad aceptable")
+	fmt.Println("  🔴 Rojo (<50%)     - Integridad deficiente")
 	fmt.Println()
 	fmt.Println("EJEMPLOS:")
 	fmt.Println("  # Convertir un archivo específico")

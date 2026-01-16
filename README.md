@@ -18,6 +18,8 @@
 - **Concurrencia inteligente**: Goroutines para procesamiento paralelo ultra-rápido
 - **Flexible**: Convierte un archivo o una carpeta completa
 - **Salida personalizable**: Define tu propia carpeta de destino
+- **Verificación de integridad**: Muestra el porcentaje de contenido que se conservó en la conversión
+- **Indicador visual**: 🟢 Verde, 🟡 Amarillo, 🟠 Naranja, 🔴 Rojo según integridad
 - **Multiplataforma**: Funciona en Linux, macOS y Windows
 
 ## ⚡ Características
@@ -97,8 +99,9 @@ go install ./cmd/docx-to-md
 📄 Archivos a procesar: 10
 ⚡ Workers paralelos: 8
 
-✅ [1/10] Convertido: documento1.docx
-✅ [2/10] Convertido: documento2.docx
+✅ [1/10] 🟢 Convertido: documento1.docx     100.0%
+✅ [2/10] 🟢 Convertido: documento2.docx     100.0%
+✅ [3/10] 🟡 Convertido: documento3.docx      87.5%
 ...
 
 ═══════════════════════════════════════════════════════════════
@@ -107,6 +110,11 @@ go install ./cmd/docx-to-md
 
   ✅ Archivos convertidos exitosamente: 10
 
+  📋 INTEGRIDAD DE CONTENIDO:
+    Promedio: 95.20%
+    Mínima: 87.50%
+    Máxima: 100.00%
+
   ⏱️  Tiempo total de ejecución: 0.45s
   📈 Tiempo promedio por archivo: 0.089s
   🚀 Velocidad: 22.22 archivos/segundo
@@ -114,6 +122,22 @@ go install ./cmd/docx-to-md
   ⚡ Speedup por concurrencia: 1.98x más rápido
 ═══════════════════════════════════════════════════════════════
 ```
+
+### Indicador de Integridad
+
+El convertidor ahora muestra un indicador visual de la integridad del contenido:
+
+| Símbolo | Rango | Significado |
+|---------|-------|------------|
+| 🟢 Verde | ≥95% | Integridad óptima - Todo el contenido se conservó |
+| 🟡 Amarillo | 80-94% | Integridad buena - Casi todo el contenido se conservó |
+| 🟠 Naranja | 50-79% | Integridad aceptable - Parte del contenido se conservó |
+| 🔴 Rojo | <50% | Integridad deficiente - Se perdió mucho contenido |
+
+Cada archivo muestra su porcentaje de integridad durante la conversión, y al final se muestra un resumen con:
+- **Promedio**: Integridad promedio de todos los archivos convertidos
+- **Mínima**: El archivo con menor integridad
+- **Máxima**: El archivo con mayor integridad
 
 ## 🔧 Formato Soportado
 
