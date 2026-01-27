@@ -92,7 +92,7 @@ go install ./cmd/mdcaster
 ╔═══════════════════════════════════════════════════════════════╗
 ║                     Markdown Caster                           ║
 ║            Convertidor de Múltiples Formatos                  ║
-║                    Powered by Go 🚀                           ║
+║                    Powered by Go 🚀                            ║
 ╚═══════════════════════════════════════════════════════════════╝
 
 📁 Escaneando carpeta: ./documentos
