@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-// readDocxPlainText extrae el texto (elementos <t>) de word/document.xml
+// readDocxPlainText extrae el texto (elementos <w:t>) de word/document.xml
 func readDocxPlainText(path string) (string, error) {
 	zr, err := zip.OpenReader(path)
 	if err != nil {
@@ -40,7 +40,7 @@ func readDocxPlainText(path string) (string, error) {
 
 	var b strings.Builder
 	dec := xml.NewDecoder(strings.NewReader(string(docBytes)))
-	var inT bool
+	inT := false
 	for {
 		tok, err := dec.Token()
 		if err == io.EOF {
@@ -85,17 +85,10 @@ func normalizeText(s string) string {
 	return s
 }
 
+// TestIntegrity_DocxToMarkdownContainsOriginalText verifica que el Markdown
+// generado conserva el texto del original.
 func TestIntegrity_DocxToMarkdownContainsOriginalText(t *testing.T) {
-	// localizar archivo de prueba
-	candidate := "word/INSTRUMENTO DE DETERMINACIÓN DEL PRESUPUESTO PUNTOS WIFI (01-12-25).docx"
-	input := candidate
-	if _, err := os.Stat(input); os.IsNotExist(err) {
-		// intentar ruta relativa desde el paquete
-		input = filepath.Join("..", "..", candidate)
-	}
-	if _, err := os.Stat(input); os.IsNotExist(err) {
-		t.Skipf("archivo de prueba .docx no encontrado, se omite: %s", candidate)
-	}
+	input := requireCorpusFile(t, "word", "*.docx")
 
 	// extraer texto original
 	orig, err := readDocxPlainText(input)
@@ -105,8 +98,7 @@ func TestIntegrity_DocxToMarkdownContainsOriginalText(t *testing.T) {
 	t.Logf("Longitud texto original: %d bytes", len(orig))
 
 	// convertir a Markdown
-	tmp := t.TempDir()
-	out := filepath.Join(tmp, "integrity.md")
+	out := filepath.Join(t.TempDir(), "integrity.md")
 	conv := NewConverter()
 	if err := conv.ConvertFile(input, out); err != nil {
 		t.Fatalf("ConvertFile falló: %v", err)
@@ -138,6 +130,51 @@ func TestIntegrity_DocxToMarkdownContainsOriginalText(t *testing.T) {
 		} else {
 			t.Fatalf("la versión Markdown no contiene el texto original (integridad no verificada)\nOriginal(normalizado): %q\nMarkdown(normalizado, inicio): %q", nOrig[:min(len(nOrig), 200)], nMd[:min(len(nMd), 200)])
 		}
+	}
+}
+
+// TestIntegrity_DocxReportsCoverage comprueba que la verificación de
+// integridad devuelve un porcentaje plausible para un DOCX.
+func TestIntegrity_DocxReportsCoverage(t *testing.T) {
+	input := requireCorpusFile(t, "word", "*.docx")
+	out := filepath.Join(t.TempDir(), "integrity.md")
+
+	conv := NewConverter()
+	if err := conv.ConvertFile(input, out); err != nil {
+		t.Fatalf("ConvertFile falló: %v", err)
+	}
+
+	percent := CheckIntegrity(input, out)
+	t.Logf("integridad: %.2f%%", percent)
+
+	if percent <= 0 {
+		t.Fatalf("integridad 0 %% para un DOCX convertido: %v", percent)
+	}
+	if percent > 100 {
+		t.Fatalf("integridad fuera de rango: %v", percent)
+	}
+}
+
+// TestIntegrity_ReusedTextMatchesFilePath comprueba que reutilizar el texto
+// que el procesador ya extrajo da el mismo resultado que releer el original
+// desde disco. Es la garantía de que el atajo no cambia la métrica.
+func TestIntegrity_ReusedTextMatchesFilePath(t *testing.T) {
+	input := requireCorpusFile(t, "word", "*.docx")
+	out := filepath.Join(t.TempDir(), "integrity.md")
+
+	conv := NewConverter()
+	if err := conv.ConvertFile(input, out); err != nil {
+		t.Fatalf("ConvertFile falló: %v", err)
+	}
+
+	fromFile := CheckIntegrity(input, out)
+	reused := conv.CheckIntegrity(input, out)
+
+	t.Logf("integridad releyendo el original: %.4f%%", fromFile)
+	t.Logf("integridad reutilizando el texto: %.4f%%", reused)
+
+	if fromFile != reused {
+		t.Fatalf("el texto reutilizado da un resultado distinto: %.4f%% != %.4f%%", reused, fromFile)
 	}
 }
 

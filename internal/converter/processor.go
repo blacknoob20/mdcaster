@@ -12,6 +12,17 @@ type FileProcessor interface {
 	Process(inputPath, outputPath string) error
 }
 
+// TextExtractor es una interfaz opcional. Los procesadores que, al convertir,
+// han extraído ya el texto del original la implementan. Permite verificar la
+// integridad del contenido sin tener que parsear el documento por segunda vez.
+//
+// Un procesador que no la implemente sigue siendo válido: la verificación
+// recurrirá a leer el original desde disco.
+type TextExtractor interface {
+	// ExtractedText devuelve el texto plano del último documento procesado.
+	ExtractedText() string
+}
+
 // ProcessorFactory crea procesadores según el tipo de archivo
 type ProcessorFactory struct {
 	processors map[string]FileProcessor

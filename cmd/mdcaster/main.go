@@ -205,7 +205,7 @@ func processFilesWithConcurrency(files []string, outputDir string, numWorkers in
 				// Calcular integridad si la conversión fue exitosa
 				integrityPercent := 0.0
 				if err == nil {
-					integrityPercent = converter.CheckIntegrity(inputFile, outputPath)
+					integrityPercent = conv.CheckIntegrity(inputFile, outputPath)
 				}
 
 				result := converter.ConversionResult{

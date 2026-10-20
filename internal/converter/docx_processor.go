@@ -14,6 +14,9 @@ import (
 // DocxProcessor procesa archivos DOCX
 type DocxProcessor struct {
 	relationships map[string]string
+	// Texto plano del último documento procesado. Permite verificar la
+	// integridad del contenido sin volver a parsear el DOCX.
+	lastText string
 }
 
 // NewDocxProcessor crea una nueva instancia del procesador DOCX
@@ -25,8 +28,9 @@ func NewDocxProcessor() *DocxProcessor {
 
 // Process convierte un DOCX a Markdown
 func (dp *DocxProcessor) Process(inputPath, outputPath string) error {
-	// Reiniciar relationships para cada archivo
+	// Reiniciar el estado para cada archivo
 	dp.relationships = make(map[string]string)
+	dp.lastText = ""
 
 	// Abrir el archivo DOCX (que es un ZIP)
 	reader, err := zip.OpenReader(inputPath)
@@ -64,10 +68,11 @@ func (dp *DocxProcessor) Process(inputPath, outputPath string) error {
 	}
 
 	// Parsear el documento
-	markdown, err := dp.parseDocument(documentContent)
+	markdown, plainText, err := dp.parseDocument(documentContent)
 	if err != nil {
 		return fmt.Errorf("error parseando documento: %w", err)
 	}
+	dp.lastText = plainText
 
 	// Escribir el archivo Markdown
 	if err := os.WriteFile(outputPath, []byte(markdown), 0644); err != nil {
@@ -117,8 +122,12 @@ func (dp *DocxProcessor) parseRelationships(content []byte) {
 
 // parseDocument convierte el XML del documento a Markdown extrayendo TODOS los párrafos
 // ignorando completamente las estructuras de tabla de Word
-func (dp *DocxProcessor) parseDocument(content []byte) (string, error) {
+//
+// Devuelve el Markdown y el texto plano del documento. El texto plano se usa
+// para verificar la integridad del contenido sin parsear el DOCX otra vez.
+func (dp *DocxProcessor) parseDocument(content []byte) (string, string, error) {
 	var markdown strings.Builder
+	var plainText strings.Builder
 
 	// Usar un decoder para manejar namespaces
 	decoder := xml.NewDecoder(strings.NewReader(string(content)))
@@ -137,7 +146,7 @@ func (dp *DocxProcessor) parseDocument(content []byte) (string, error) {
 			break
 		}
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 
 		switch t := token.(type) {
@@ -198,6 +207,11 @@ func (dp *DocxProcessor) parseDocument(content []byte) (string, error) {
 					text := textStack[len(textStack)-1]
 					textStack = textStack[:len(textStack)-1]
 
+					// Texto plano, sin marcas de formato, para la
+					// verificación de integridad.
+					plainText.WriteString(text)
+					plainText.WriteString(" ")
+
 					// Aplicar formato
 					if text != "" {
 						if isBold {
@@ -241,7 +255,12 @@ func (dp *DocxProcessor) parseDocument(content []byte) (string, error) {
 	}
 
 	result := dp.cleanMarkdown(markdown.String())
-	return result, nil
+	return result, plainText.String(), nil
+}
+
+// ExtractedText devuelve el texto plano del último documento procesado.
+func (dp *DocxProcessor) ExtractedText() string {
+	return dp.lastText
 }
 
 // applyParagraphStyle aplica el estilo del párrafo
@@ -277,14 +296,17 @@ func (dp *DocxProcessor) applyParagraphStyle(content, style string, isList bool,
 	return content
 }
 
+// emptyBoldAre detecta marcas de negrita vacías. Se compila una sola vez:
+// cleanFormatting se llama por cada párrafo del documento.
+var emptyBoldAre = regexp.MustCompile(`\*\*\s*\*\*`)
+
 // cleanFormatting limpia el formato duplicado
 func cleanFormatting(content string) string {
 	// Limpiar formato duplicado como ****texto****
 	content = strings.ReplaceAll(content, "****", "**")
 
 	// Limpiar ** vacíos
-	re := regexp.MustCompile(`\*\*\s*\*\*`)
-	content = re.ReplaceAllString(content, "")
+	content = emptyBoldAre.ReplaceAllString(content, "")
 
 	return content
 }
