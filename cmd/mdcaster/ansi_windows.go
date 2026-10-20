@@ -20,7 +20,10 @@ func enableVirtualTerminal() {
 	kernel32 := syscall.NewLazyDLL("kernel32.dll")
 
 	getStdHandle := kernel32.NewProc("GetStdHandle")
-	handle, _, _ := getStdHandle.Call(uintptr(int32(syscall.STD_OUTPUT_HANDLE)))
+	// La constante es negativa: la conversión a uintptr tiene que hacerse
+	// en una variable, o el compilador la rechaza por desbordamiento.
+	stdOutput := int32(syscall.STD_OUTPUT_HANDLE)
+	handle, _, _ := getStdHandle.Call(uintptr(stdOutput))
 	if handle == 0 {
 		return
 	}
