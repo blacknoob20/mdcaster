@@ -472,3 +472,112 @@ func TestDocx_WithoutNumberingFallsBackToBullets(t *testing.T) {
 		t.Errorf("sin numbering.xml el elemento no es una viñeta:\n%s", md)
 	}
 }
+
+// TestDocx_UnderlineIsEmittedAsHTML comprueba que el subrayado se conserva
+// como HTML en línea, porque Markdown no lo tiene.
+func TestDocx_UnderlineIsEmittedAsHTML(t *testing.T) {
+	body := `<w:p><w:r><w:rPr><w:u w:val="single"/></w:rPr><w:t>Subrayado</w:t></w:r></w:p>
+<w:p><w:r><w:rPr><w:u/></w:rPr><w:t>Sin valor</w:t></w:r></w:p>
+<w:p><w:r><w:rPr><w:u w:val="none"/></w:rPr><w:t>Sin subrayado</w:t></w:r></w:p>
+<w:p><w:r><w:rPr><w:b/><w:u/></w:rPr><w:t>Negrita y subrayado</w:t></w:r></w:p>`
+
+	md := convertDocx(t, docWithBody(body))
+
+	if !strings.Contains(md, "<u>Subrayado</u>") {
+		t.Errorf("el subrayado no se emitió:\n%s", md)
+	}
+	if !strings.Contains(md, "<u>Sin valor</u>") {
+		t.Errorf("un subrayado sin valor no se emitió:\n%s", md)
+	}
+	if strings.Contains(md, "<u>Sin subrayado</u>") {
+		t.Errorf("un subrayado con val=\"none\" se emitió:\n%s", md)
+	}
+	// El HTML va por fuera del énfasis, para que las marcas de Markdown de
+	// dentro sigan interpretándose.
+	if !strings.Contains(md, "<u>**Negrita y subrayado**</u>") {
+		t.Errorf("el subrayado no envuelve al énfasis:\n%s", md)
+	}
+}
+
+// TestDocx_SkipBeforeHeading comprueba que el descarte empieza en el primer
+// encabezado y descarta la portada.
+func TestDocx_SkipBeforeHeading(t *testing.T) {
+	body := `<w:p><w:r><w:t>PORTADA INSTITUCIONAL</w:t></w:r></w:p>
+<w:p><w:r><w:t>Tabla de versión</w:t></w:r></w:p>
+<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Título real</w:t></w:r></w:p>
+<w:p><w:r><w:t>Cuerpo del documento</w:t></w:r></w:p>`
+
+	parts := docWithBody(body)
+	input := buildTestDocx(t, parts)
+	output := filepath.Join(t.TempDir(), "salida.md")
+
+	conv := NewConverter()
+	conv.SetSkipBeforeHeading(true)
+	if err := conv.Convert(input, output); err != nil {
+		t.Fatalf("la conversión falló: %v", err)
+	}
+
+	data, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatalf("no se pudo leer el Markdown: %v", err)
+	}
+
+	md := string(data)
+	if strings.Contains(md, "PORTADA INSTITUCIONAL") {
+		t.Errorf("la portada no se descartó:\n%s", md)
+	}
+	if strings.Contains(md, "Tabla de versión") {
+		t.Errorf("la tabla de versión no se descartó:\n%s", md)
+	}
+	if !strings.Contains(md, "# Título real") || !strings.Contains(md, "Cuerpo del documento") {
+		t.Errorf("el contenido del encabezado se perdió:\n%s", md)
+	}
+}
+
+// TestDocx_SkipBeforeHeadingKeepsIntegrity comprueba que el descarte también
+// se aplica al texto de la integridad: la mide sobre lo que se conserva.
+func TestDocx_SkipBeforeHeadingKeepsIntegrity(t *testing.T) {
+	body := `<w:p><w:r><w:t>PORTADA</w:t></w:r></w:p>
+<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Título</w:t></w:r></w:p>
+<w:p><w:r><w:t>Cuerpo</w:t></w:r></w:p>`
+
+	parts := docWithBody(body)
+	input := buildTestDocx(t, parts)
+	output := filepath.Join(t.TempDir(), "salida.md")
+
+	conv := NewConverter()
+	conv.SetSkipBeforeHeading(true)
+	if err := conv.Convert(input, output); err != nil {
+		t.Fatalf("la conversión falló: %v", err)
+	}
+
+	integrity := conv.CheckIntegrity(input, output)
+	if integrity < 99 {
+		t.Errorf("la integridad tras el descarte es %.2f %%: el texto descartado sigue contando", integrity)
+	}
+}
+
+// TestDocx_SkipBeforeHeadingWithoutHeading comprueba que un documento sin
+// encabezados no se vacía.
+func TestDocx_SkipBeforeHeadingWithoutHeading(t *testing.T) {
+	body := `<w:p><w:r><w:t>Solo texto</w:t></w:r></w:p>`
+
+	parts := docWithBody(body)
+	input := buildTestDocx(t, parts)
+	output := filepath.Join(t.TempDir(), "salida.md")
+
+	conv := NewConverter()
+	conv.SetSkipBeforeHeading(true)
+	if err := conv.Convert(input, output); err != nil {
+		t.Fatalf("la conversión falló: %v", err)
+	}
+
+	data, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatalf("no se pudo leer el Markdown: %v", err)
+	}
+
+	if !strings.Contains(string(data), "Solo texto") {
+		t.Errorf("un documento sin encabezados se vació:\n%s", data)
+	}
+}

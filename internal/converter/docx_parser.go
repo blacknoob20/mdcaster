@@ -37,10 +37,11 @@ func isWordNamespace(space string) bool {
 // inlineSpan es un fragmento de texto con el formato que tenía en el
 // documento original.
 type inlineSpan struct {
-	text   string
-	bold   bool
-	italic bool
-	strike bool
+	text      string
+	bold      bool
+	italic    bool
+	strike    bool
+	underline bool
 	// raw indica que el texto se emite tal cual, sin marcas de énfasis.
 	// Se usa para las imágenes, que ya son Markdown.
 	raw bool
@@ -60,6 +61,8 @@ type docxParagraph struct {
 	// spans guarda los fragmentos originales: hacen falta para renderizar el
 	// párrafo como HTML (listas con etiquetas no decimales).
 	spans []inlineSpan
+	// plainStart es la longitud del texto plano cuando empezó el párrafo.
+	plainStart int
 }
 
 // vMergeKind describe la participación de una celda en una unión vertical.
@@ -91,6 +94,8 @@ type docxRow struct {
 // docxTable es una tabla.
 type docxTable struct {
 	rows []*docxRow
+	// plainStart es la longitud del texto plano cuando empezó la tabla.
+	plainStart int
 }
 
 // docxBlockKind distingue los tipos de bloque del cuerpo del documento.
@@ -106,6 +111,8 @@ type docxBlock struct {
 	kind  docxBlockKind
 	para  *docxParagraph
 	table *docxTable
+	// plainStart es la longitud del texto plano cuando empezó el bloque.
+	plainStart int
 }
 
 // docxDocument es el resultado de parsear word/document.xml.
@@ -113,8 +120,8 @@ type docxDocument struct {
 	// blocks son los bloques del cuerpo, en orden.
 	blocks []docxBlock
 	// plain es el texto plano del documento, para la verificación de
-	// integridad.
-	plain strings.Builder
+	// integridad. Es un slice para poder recortar el contenido descartado.
+	plain []byte
 	// footnotes son los identificadores de las notas al pie referenciadas en
 	// el cuerpo, en orden de aparición.
 	footnotes []int
@@ -144,9 +151,10 @@ type docxParser struct {
 	doc *docxDocument
 
 	// Formato en línea vigente (se reinicia en cada run).
-	bold   bool
-	italic bool
-	strike bool
+	bold      bool
+	italic    bool
+	strike    bool
+	underline bool
 	// textStack apila el texto de cada <w:t> abierto.
 	textStack []string
 
@@ -165,20 +173,59 @@ type docxParser struct {
 	// pendingAlt guarda el texto alternativo del <wp:docPr>, que en el XML
 	// precede al <a:blip> de la misma imagen.
 	pendingAlt string
+
+	// skipBeforeHeading descarta el contenido anterior al primer encabezado.
+	skipBeforeHeading bool
 }
 
 // parseDocxDocument parsea el cuerpo del documento.
-func parseDocxDocument(content []byte) (*docxDocument, error) {
+//
+// Con skipBeforeHeading, el contenido anterior al primer encabezado se
+// descarta: no se emiten ni bloques ni texto, de modo que la verificación de
+// integridad mide el contenido que se conserva. Si el documento no tiene
+// ningún encabezado, se conserva todo: descartar un documento entero sería
+// perder la información.
+func parseDocxDocument(content []byte, skipBeforeHeading bool) (*docxDocument, error) {
 	p := &docxParser{
-		dec: xml.NewDecoder(bytes.NewReader(content)),
-		doc: &docxDocument{},
+		dec:               xml.NewDecoder(bytes.NewReader(content)),
+		doc:               &docxDocument{},
+		skipBeforeHeading: skipBeforeHeading,
 	}
 
 	if err := p.parse(); err != nil {
 		return nil, err
 	}
 
+	if skipBeforeHeading {
+		p.doc.skipBeforeFirstHeading()
+	}
+
 	return p.doc, nil
+}
+
+// skipBeforeFirstHeading descarta los bloques anteriores al primer
+// encabezado, y el texto plano que les corresponde.
+func (d *docxDocument) skipBeforeFirstHeading() {
+	for i, block := range d.blocks {
+		if block.kind != blockParagraph || block.para == nil {
+			continue
+		}
+		if paragraphPrefix(block.para.style) == "" {
+			continue
+		}
+
+		if i == 0 {
+			return
+		}
+
+		d.blocks = d.blocks[i:]
+		// El texto plano de un bloque empieza en su plainStart: desde ahí
+		// se conserva, y lo anterior se descarta.
+		if block.plainStart <= len(d.plain) {
+			d.plain = d.plain[block.plainStart:]
+		}
+		return
+	}
 }
 
 // parse recorre todos los tokens del XML.
@@ -215,7 +262,7 @@ func (p *docxParser) startElement(t xml.StartElement) {
 		}
 	case "tbl":
 		if isWordNamespace(space) {
-			p.tables = append(p.tables, &docxTable{})
+			p.tables = append(p.tables, &docxTable{plainStart: len(p.doc.plain)})
 		}
 	case "tr":
 		if isWordNamespace(space) {
@@ -255,16 +302,17 @@ func (p *docxParser) startElement(t xml.StartElement) {
 		if isWordNamespace(space) && p.inRun {
 			p.inRunRPr = true
 		}
-	case "b", "i", "strike":
+	case "b", "i", "strike", "u":
 		if isWordNamespace(space) && p.inRunRPr {
-			on := attrBool(t, "val", true)
 			switch local {
 			case "b":
-				p.bold = on
+				p.bold = attrBool(t, "val", true)
 			case "i":
-				p.italic = on
+				p.italic = attrBool(t, "val", true)
 			case "strike":
-				p.strike = on
+				p.strike = attrBool(t, "val", true)
+			case "u":
+				p.underline = attrUnderline(t)
 			}
 		}
 	case "t":
@@ -352,7 +400,7 @@ func (p *docxParser) endElement(t xml.EndElement) {
 		if isWordNamespace(space) {
 			p.inRun = false
 			p.inRunRPr = false
-			p.bold, p.italic, p.strike = false, false, false
+			p.bold, p.italic, p.strike, p.underline = false, false, false, false
 		}
 	case "rPr":
 		if isWordNamespace(space) {
@@ -375,8 +423,8 @@ func (p *docxParser) charData(t xml.CharData) {
 
 // startParagraph abre un párrafo.
 func (p *docxParser) startParagraph() {
-	p.para = &docxParagraph{}
-	p.bold, p.italic, p.strike = false, false, false
+	p.para = &docxParagraph{plainStart: len(p.doc.plain)}
+	p.bold, p.italic, p.strike, p.underline = false, false, false, false
 }
 
 // endParagraph cierra el párrafo y decide dónde va su texto: a una celda de
@@ -384,7 +432,7 @@ func (p *docxParser) startParagraph() {
 func (p *docxParser) endParagraph() {
 	para := p.para
 	p.para = nil
-	p.bold, p.italic, p.strike = false, false, false
+	p.bold, p.italic, p.strike, p.underline = false, false, false, false
 
 	if para == nil {
 		return
@@ -406,7 +454,11 @@ func (p *docxParser) endParagraph() {
 		return
 	}
 
-	p.doc.blocks = append(p.doc.blocks, docxBlock{kind: blockParagraph, para: para})
+	p.doc.blocks = append(p.doc.blocks, docxBlock{
+		kind:       blockParagraph,
+		para:       para,
+		plainStart: para.plainStart,
+	})
 }
 
 // endText cierra un <w:t>: vuelca el texto al párrafo y al texto plano.
@@ -422,8 +474,8 @@ func (p *docxParser) endText() {
 		return
 	}
 
-	p.doc.plain.WriteString(text)
-	p.doc.plain.WriteString(" ")
+	p.doc.plain = append(p.doc.plain, text...)
+	p.doc.plain = append(p.doc.plain, ' ')
 	p.addSpan(text)
 }
 
@@ -436,17 +488,19 @@ func (p *docxParser) addSpan(text string) {
 
 	if n := len(p.para.spans); n > 0 {
 		last := &p.para.spans[n-1]
-		if !last.raw && last.bold == p.bold && last.italic == p.italic && last.strike == p.strike {
+		if !last.raw && last.bold == p.bold && last.italic == p.italic &&
+			last.strike == p.strike && last.underline == p.underline {
 			last.text += text
 			return
 		}
 	}
 
 	p.para.spans = append(p.para.spans, inlineSpan{
-		text:   text,
-		bold:   p.bold,
-		italic: p.italic,
-		strike: p.strike,
+		text:      text,
+		bold:      p.bold,
+		italic:    p.italic,
+		strike:    p.strike,
+		underline: p.underline,
 	})
 }
 
@@ -489,7 +543,11 @@ func (p *docxParser) endTable() {
 		return
 	}
 
-	p.doc.blocks = append(p.doc.blocks, docxBlock{kind: blockTable, table: tbl})
+	p.doc.blocks = append(p.doc.blocks, docxBlock{
+		kind:       blockTable,
+		table:      tbl,
+		plainStart: tbl.plainStart,
+	})
 }
 
 // endRow cierra una fila de la tabla en curso.
@@ -580,6 +638,12 @@ func renderSpansMarkdown(spans []inlineSpan) string {
 		if s.strike {
 			core = "~~" + core + "~~"
 		}
+		if s.underline {
+			// El subrayado no existe en Markdown: se emite como HTML en
+			// línea, por fuera del énfasis, para que las marcas de Markdown
+			// de dentro sigan interpretándose.
+			core = "<u>" + core + "</u>"
+		}
 
 		sb.WriteString(lead)
 		sb.WriteString(core)
@@ -609,6 +673,9 @@ func renderSpansHTML(spans []inlineSpan) string {
 		}
 		if s.strike {
 			text = "<del>" + text + "</del>"
+		}
+		if s.underline {
+			text = "<u>" + text + "</u>"
 		}
 		sb.WriteString(text)
 	}
@@ -646,6 +713,20 @@ func attrBool(t xml.StartElement, name string, def bool) bool {
 	}
 	switch strings.ToLower(value) {
 	case "0", "false", "off":
+		return false
+	}
+	return true
+}
+
+// attrUnderline interpreta el valor de <w:u>. El subrayado no tiene
+// equivalente en Markdown: se emite como HTML en línea.
+func attrUnderline(t xml.StartElement) bool {
+	value := strings.ToLower(strings.TrimSpace(attrValue(t, "val")))
+	switch value {
+	case "":
+		// Sin valor: subrayado simple.
+		return true
+	case "none", "0", "false", "off":
 		return false
 	}
 	return true

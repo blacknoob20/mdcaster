@@ -32,6 +32,7 @@ func main() {
 	outputShort := flag.String("o", "", "Carpeta de destino (forma corta)")
 	workers := flag.Int("workers", 0, "Número de workers para procesamiento paralelo (0 = auto)")
 	workersShort := flag.Int("w", 0, "Número de workers (forma corta)")
+	skipBeforeHeading := flag.Bool("skip-before-heading", false, "Empezar la conversión en el primer encabezado (descarta portada, índice y tablas de versión)")
 	showVersion := flag.Bool("version", false, "Mostrar versión")
 	showHelp := flag.Bool("help", false, "Mostrar ayuda")
 
@@ -67,6 +68,9 @@ func main() {
 	if numWorkers == 0 && *workersShort > 0 {
 		numWorkers = *workersShort
 	}
+
+	// El descarte antes del primer encabezado se aplica a los DOCX
+	skip := *skipBeforeHeading
 
 	// Validar entrada
 	if input == "" {
@@ -158,14 +162,14 @@ func main() {
 
 	// Iniciar conversión con concurrencia
 	startTime := time.Now()
-	results := processFilesWithConcurrency(filesToProcess, output, numWorkers)
+	results := processFilesWithConcurrency(filesToProcess, output, numWorkers, skip)
 
 	// Mostrar resultados
 	printResults(results, startTime)
 }
 
 // processFilesWithConcurrency procesa archivos usando workers concurrentes
-func processFilesWithConcurrency(files []string, outputDir string, numWorkers int) []converter.ConversionResult {
+func processFilesWithConcurrency(files []string, outputDir string, numWorkers int, skipBeforeHeading bool) []converter.ConversionResult {
 	var (
 		wg           sync.WaitGroup
 		results      []converter.ConversionResult
@@ -183,6 +187,7 @@ func processFilesWithConcurrency(files []string, outputDir string, numWorkers in
 		go func(workerID int) {
 			defer wg.Done()
 			conv := converter.NewConverter()
+			conv.SetSkipBeforeHeading(skipBeforeHeading)
 
 			for inputFile := range jobs {
 				startTime := time.Now()

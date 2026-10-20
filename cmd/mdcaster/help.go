@@ -21,6 +21,9 @@ func printHelp() {
 	fmt.Println("  -i, --input    Archivo o carpeta con archivos soportados a convertir")
 	fmt.Println("  -o, --output   Carpeta de destino para archivos convertidos (default: 'converted')")
 	fmt.Println("  -w, --workers  Número de workers paralelos (default: número de CPUs)")
+	fmt.Println("      --skip-before-heading")
+	fmt.Println("                 Empezar la conversión en el primer encabezado:")
+	fmt.Println("                 descarta portada, índice y tablas de versión")
 	fmt.Println("      --version  Mostrar versión del programa")
 	fmt.Println("      --help     Mostrar esta ayuda")
 	fmt.Println()
@@ -42,6 +45,9 @@ func printHelp() {
 	fmt.Println()
 	fmt.Println("  # Usar 8 workers paralelos")
 	fmt.Println("  mdcaster -i ./documentos -w 8")
+	fmt.Println()
+	fmt.Println("  # Descartar portada, índice y tablas de versión")
+	fmt.Println("  mdcaster -i ./documentos --skip-before-heading")
 }
 
 // printUsage muestra el uso básico

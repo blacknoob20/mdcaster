@@ -23,6 +23,17 @@ type TextExtractor interface {
 	ExtractedText() string
 }
 
+// SkipBeforeHeadingSetter es una interfaz opcional. Los procesadores que
+// pueden descartar el contenido anterior al primer encabezado la implementan.
+//
+// No forma parte de `FileProcessor`: es **opcional**, y un procesador que no
+// la implemente simplemente ignora la opción.
+type SkipBeforeHeadingSetter interface {
+	// SetSkipBeforeHeading activa o desactiva el descarte del contenido
+	// anterior al primer encabezado.
+	SetSkipBeforeHeading(enabled bool)
+}
+
 // ProcessorFactory crea procesadores según el tipo de archivo
 type ProcessorFactory struct {
 	processors map[string]FileProcessor
@@ -72,6 +83,16 @@ func (pf *ProcessorFactory) IsSupportedFile(path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
 	_, exists := pf.processors[ext]
 	return exists
+}
+
+// SetSkipBeforeHeading propaga la opción a los procesadores que la
+// implementen. Los que no la soportan la ignoran.
+func (pf *ProcessorFactory) SetSkipBeforeHeading(enabled bool) {
+	for _, processor := range pf.processors {
+		if setter, ok := processor.(SkipBeforeHeadingSetter); ok {
+			setter.SetSkipBeforeHeading(enabled)
+		}
+	}
 }
 
 // Convert convierte un archivo usando el procesador adecuado

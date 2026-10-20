@@ -44,6 +44,18 @@ func (c *Converter) ConvertFile(inputPath, outputPath string) error {
 	return c.Convert(inputPath, outputPath)
 }
 
+// SetSkipBeforeHeading hace que la conversión de los DOCX empiece en el
+// primer encabezado: se descartan la portada, el índice y las tablas de
+// versión que lo anteceden.
+//
+// El descarte también se aplica al texto que se extrae para la verificación
+// de integridad: la mide sobre el contenido que se conserva.
+//
+// Los formatos que no lo soportan (el PDF) lo ignoran.
+func (c *Converter) SetSkipBeforeHeading(enabled bool) {
+	c.factory.SetSkipBeforeHeading(enabled)
+}
+
 // CheckIntegrity verifica qué porcentaje del contenido original se conserva en
 // el Markdown.
 //

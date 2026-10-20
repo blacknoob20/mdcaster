@@ -27,6 +27,8 @@ type DocxProcessor struct {
 	// Texto plano del último documento procesado. Permite verificar la
 	// integridad del contenido sin volver a parsear el DOCX.
 	lastText string
+	// skipBeforeHeading descarta el contenido anterior al primer encabezado.
+	skipBeforeHeading bool
 }
 
 // docxRelationship es una relación del documento (document.xml.rels).
@@ -84,7 +86,7 @@ func (dp *DocxProcessor) Process(inputPath, outputPath string) error {
 	core := parseDocxCoreProps(parts[partCoreProps])
 
 	// Parsear el documento
-	doc, err := parseDocxDocument(parts[partDocument])
+	doc, err := parseDocxDocument(parts[partDocument], dp.skipBeforeHeading)
 	if err != nil {
 		return fmt.Errorf("error parseando documento: %w", err)
 	}
@@ -117,7 +119,7 @@ func (dp *DocxProcessor) Process(inputPath, outputPath string) error {
 	// El texto plano incluye el de las notas al pie: es contenido del
 	// documento y cuenta para la integridad. Cada nota cuenta una sola vez,
 	// aunque se referencie varias veces.
-	plain := doc.plain.String()
+	plain := string(doc.plain)
 	seenNotes := make(map[int]bool, len(doc.footnotes))
 	for _, id := range doc.footnotes {
 		if seenNotes[id] {
@@ -178,6 +180,12 @@ func (dp *DocxProcessor) parseRelationships(content []byte) {
 			TargetMode: rel.TargetMode,
 		}
 	}
+}
+
+// SetSkipBeforeHeading activa o desactiva el descarte del contenido anterior
+// al primer encabezado.
+func (dp *DocxProcessor) SetSkipBeforeHeading(enabled bool) {
+	dp.skipBeforeHeading = enabled
 }
 
 // ExtractedText devuelve el texto plano del último documento procesado.
