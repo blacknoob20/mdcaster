@@ -68,6 +68,10 @@ func isStructuralLine(line string) bool {
 	if strings.HasPrefix(trimmed, "![](") {
 		return true
 	}
+	// Filas de tabla Markdown: son estructura, no texto que se pueda unir.
+	if strings.HasPrefix(trimmed, "|") {
+		return true
+	}
 
 	// Headings / section markers common in this corpus.
 	// Keep conservative: don't join across these.
@@ -107,6 +111,10 @@ func isTDRStructuralLine(line string) bool {
 		return true
 	}
 	if strings.HasPrefix(trimmed, "![](") {
+		return true
+	}
+	// Filas de tabla Markdown: son estructura, no texto que se pueda unir.
+	if strings.HasPrefix(trimmed, "|") {
 		return true
 	}
 	if reBullet.MatchString(trimmed) {
@@ -779,6 +787,26 @@ func readAllLines(r io.Reader) ([]string, error) {
 	return lines, nil
 }
 
+// splitFrontmatter separa el bloque de frontmatter YAML del principio del
+// documento.
+//
+// El bloque se devuelve tal cual, sin normalizar: son metadatos, no texto.
+// Si el documento no empieza por un delimitador "---", no hay frontmatter.
+func splitFrontmatter(lines []string) (frontmatter []string, body []string) {
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
+		return nil, lines
+	}
+
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			return lines[:i+1], lines[i+1:]
+		}
+	}
+
+	// Frontmatter sin cerrar: no se toca nada.
+	return nil, lines
+}
+
 func process(lines []string) []string {
 	out := make([]string, 0, len(lines))
 	for i := 0; i < len(lines); i++ {
@@ -846,12 +874,18 @@ func main() {
 		os.Exit(1)
 	}
 
+	// El frontmatter YAML se aparta: son metadatos, no texto que se pueda
+	// unir ni normalizar.
+	frontmatter, body := splitFrontmatter(lines)
+
 	var clean []string
 	if *flagTDR {
-		clean = processTDR(lines)
+		clean = processTDR(body)
 	} else {
-		clean = process(lines)
+		clean = process(body)
 	}
+
+	clean = append(frontmatter, clean...)
 
 	if *flagInplace {
 		// In shared folders (e.g., vboxsf), atomic rename over an existing file may fail.

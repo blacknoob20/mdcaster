@@ -39,7 +39,7 @@ Uso: mdclean [--inplace] <archivo.md>
 
 (El nombre del binario se toma de `os.Args[0]`, línea 782.)
 
-## Flujo de `main` — `cmd/mdclean/main.go:823-880`
+## Flujo de `main` — `cmd/mdclean/main.go`
 
 ```
 1. flag.Usage = <custom>   → "Uso: <bin> [--inplace] <archivo.md>" + PrintDefaults
@@ -47,16 +47,31 @@ Uso: mdclean [--inplace] <archivo.md>
 3. Si flag.NArg() != 1 → usage → exit 2
 4. os.Open(path)            → error → stderr → exit 1
 5. readAllLines(f)          → error → stderr → exit 1
-6. clean = processTDR(lines)  si --tdr
-   clean = process(lines)     si no
-7. Si --inplace:
+6. splitFrontmatter(lines)  → (frontmatter, body)
+7. clean = processTDR(body)  si --tdr
+   clean = process(body)     si no
+8. clean = append(frontmatter, clean...)
+9. Si --inplace:
       os.Create(path)  ← TRUNCA el fichero
       writeLines(f, clean)
    Si no:
       writeLines(os.Stdout, clean)
 ```
 
-## Modo genérico (sin `--tdr`) — `process` (`cmd/mdclean/main.go:782-800`)
+### `splitFrontmatter` — `cmd/mdclean/main.go`
+
+El bloque de frontmatter YAML se aparta **antes** de limpiar: son metadatos, no texto, y unirlo
+con el cuerpo lo destrozaría.
+
+| Entrada | Salida |
+|---|---|
+| La primera línea es `---` y hay otro `---` después | `frontmatter` = líneas hasta el cierre, `body` = el resto |
+| La primera línea no es `---` | `frontmatter` = nil, `body` = todas las líneas |
+| Hay un `---` inicial pero no se cierra | `frontmatter` = nil, `body` = todas las líneas |
+
+El frontmatter se devuelve **tal cual**: no se normaliza ni se une con nada.
+
+## Modo genérico (sin `--tdr`) — `process` (`cmd/mdclean/main.go`)
 
 Une líneas consecutivas que parecen haber sido partidas por el extractor de texto.
 
@@ -96,6 +111,7 @@ Una línea es estructural (y por tanto **no** se une) si:
 | Vacía | `""` |
 | Encabezado Markdown | empieza por `#` |
 | Imagen Markdown | empieza por `![](` |
+| Fila de tabla Markdown | empieza por `|` |
 | Marcadores de sección | `NOTA GENERAL:`, `^(TITULO\|Capítulo\|Sección)\b`, `^Art\.`, `^(Concordancias\|Jurisprudencia):$`, `^(FUNCION EJECUTIVA\|ASAMBLEA NACIONAL\|PRESIDENCIA DE LA REPUBLICA)\b`, `^EL PLENO$`, `^CONSIDERANDO:$` |
 | Viñetas | `^[-*]\s+` |
 | Enumeraciones | `^[a-zA-Z]\)\s+` |
@@ -191,8 +207,8 @@ Elimina los `*` internos del fragmento y colapsa espacios.
 ### Pasada 6 — Desenvoltura de párrafos (líneas 385-401)
 
 Une líneas consecutivas en un párrafo **solo** si ninguna de las dos es estructural para TDR
-(`isTDRStructuralLine`, líneas 75-97: vacía, solo-negrita, solo-cursiva, encabezado, imagen, viñeta,
-o un `N.` de índice) y la línea actual no termina en `.`, `!`, `?` ni `:`.
+(`isTDRStructuralLine`: vacía, solo-negrita, solo-cursiva, encabezado, imagen, viñeta, fila de
+tabla, o un `N.` de índice) y la línea actual no termina en `.`, `!`, `?` ni `:`.
 
 El separador lo decide `joinerBetweenTDR` (líneas 113-135): espacio salvo que la línea termine en
 `-` o `/` (partida de palabra) o la siguiente empiece por `.`, `,`, `;`, `:`, `)`, `]`, `}`, `?`,
@@ -250,3 +266,7 @@ hay fichero temporal ni backup.
 6. El límite de 4 MiB por línea en `readAllLines` es duro: una línea mayor hace fallar el comando.
 7. `--tdr` y `--inplace` son combinables. El orden de aplicación es: TDR primero, escritura después.
 8. `mdclean` nunca falla por "contenido no convertible": solo falla por E/S o por argumentos.
+9. Las **filas de tabla** son líneas estructurales: sin eso, la limpieza unía la tabla entera en
+   una sola línea y la destruía. El conversor emite tablas Markdown desde la fase de fidelidad
+   DOCX, así que la protección es obligatoria.
+10. El **frontmatter** se aparta antes de limpiar y se devuelve tal cual.
