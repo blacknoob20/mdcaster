@@ -24,6 +24,9 @@ func BenchmarkConvertDocx(b *testing.B) {
 
 // BenchmarkCheckIntegrityDocx mide solo la verificación de integridad, que es
 // la parte más cara del pipeline actual.
+//
+// Mide la vía que usa la CLI: el texto que el processor ya extrajo al
+// convertir, sin releer el original.
 func BenchmarkCheckIntegrityDocx(b *testing.B) {
 	input := requireCorpusFile(b, "word", "*.docx")
 	out := filepath.Join(b.TempDir(), "out.md")
@@ -35,7 +38,7 @@ func BenchmarkCheckIntegrityDocx(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		CheckIntegrity(input, out)
+		conv.CheckIntegrity(input, out)
 	}
 }
 

@@ -31,8 +31,9 @@ una entrada nueva y la anterior **no se reescribe**: el historial forma parte de
 | [D14](#d14--el-subrayado-se-emite-como-html-en-línea) | El subrayado se emite como HTML en línea | Aceptada |
 | [D15](#d15--el-descarte-inicial-es-una-opción-del-processor) | El descarte inicial es una opción del processor | Aceptada |
 | [D16](#d16--mdclean-se-parte-por-responsabilidad) | `mdclean` se parte por responsabilidad | Aceptada |
-| [P1](#pendientes) | `ConvertDirectory` puede hacer `panic` | Pendiente |
-| [P2](#pendientes) | Escaneo no recursivo frente a la API recursiva | Pendiente |
+| [D17](#d17--el-dispatcher-se-parte-por-responsabilidad-y-se-elimina-el-código-muerto) | El dispatcher se parte por responsabilidad y se elimina el código muerto | Aceptada |
+| [P1](#pendientes) | `ConvertDirectory` puede hacer `panic` | Resuelto por D17 |
+| [P2](#pendientes) | Escaneo no recursivo frente a la API recursiva | Resuelto por D17 |
 | [P3](#pendientes) | Hipervínculos DOCX parseados y no emitidos | Pendiente |
 | [P4](#pendientes) | El PDF se muestra como 0 % en vez de "no medido" | Pendiente |
 | [P6](#pendientes) | La normalización borra acentos y `ñ` | Pendiente |
@@ -398,21 +399,79 @@ una sola implementación de `wordToken` para las dos direcciones.
 
 ---
 
+### D17 — El dispatcher se parte por responsabilidad y se elimina el código muerto
+
+**Estado:** aceptada
+
+**Contexto.** `internal/converter/converter.go` llegó a 411 líneas con cinco responsabilidades
+mezcladas: el dispatcher, la verificación de integridad, un segundo parser del DOCX, la API de
+conversión por directorio y un formateador de tamaños. Casi 40 % del fichero no lo usaba nadie:
+`ConvertDirectory` (60 líneas) tenía un `panic` documentado, su variante recursiva (70 líneas)
+tampoco, `ConvertPDFFile` (15 líneas) era un "alias" que no era un alias, `ByteCountSI` (13
+líneas) formateaba tamaños que nadie formateaba, y `IsDocxFile`, `GetDocxFiles`, `IsPdfFile` y
+`GetPdfFiles` eran auxiliares muertos: la CLI usa `factory.IsSupportedFile`.
+
+Además, la verificación de integridad tenía **dos** caminos para obtener el texto original: el que
+reutiliza el del processor y otro que releía el DOCX con un parser propio (`extractDocxContent`, 96
+líneas), duplicando el parseo que ya hace `DocxProcessor`.
+
+**Decisión.** El dispatcher se parte en dos ficheros **del mismo paquete** y se elimina el código
+muerto:
+
+| Fichero | Responsabilidad |
+|---|---|
+| `internal/converter/converter.go` | Dispatcher: `Converter`, `Convert`, `ConvertFile`, `SetSkipBeforeHeading`, `GetOutputPath` |
+| `internal/converter/integrity.go` | Verificación: `CheckIntegrity`, `CheckIntegrityAgainst`, `normalizeContent` |
+
+Y se elimina:
+
+| Eliminado | Motivo |
+|---|---|
+| `ConvertDirectory` | Tenía un `panic` (P1) y no lo usaba nadie |
+| `ConvertDirectoryRecursive` | No lo usaba nadie (P2) |
+| `ConvertPDFFile` | No lo usaba nadie y no era un alias de `Convert` |
+| `ByteCountSI` | No lo usaba nadie |
+| `IsDocxFile`, `GetDocxFiles`, `IsPdfFile`, `GetPdfFiles` | Auxiliares muertos: la CLI usa `factory.IsSupportedFile` |
+| `extractDocxContent`, `extractTextFromXML` y la función de paquete `CheckIntegrity` | Segundo parser del DOCX: el texto del processor es la única fuente |
+
+`ConversionResult` se mueve a `cmd/mdcaster/result.go`: es la CLI la que mide la duración y la
+integridad de cada fichero, y las rellena ahí.
+
+**Consecuencias.**
+
+- El dispatcher pasa de 411 a 50 líneas, y la verificación vive en un fichero de 97.
+- La verificación **deja de releer el original**: el texto del processor es la única fuente.
+  Medido sobre el corpus institucional, pasa de 127.237 asignaciones y 8,9 MB por documento a
+  **57 asignaciones y 0,9 MB**: 2.230 veces menos asignaciones y 9,5 veces menos memoria. El
+  tiempo baja de 35-39 ms a 4-19 ms, con el ruido de la máquina (±40 %) ya aceptado en D16.
+- **Comportamiento idéntico, verificado**: los 75 DOCX del corpus institucional y el PDF del
+  corpus se convierten **byte a byte igual** que antes, con la misma integridad (99,19 % de media,
+  81,77 % mínima, 100 % máxima) y la misma salida por consola.
+- La segunda vía de la integridad se sustituye por un test que lee el original por una vía
+  independiente (`TestIntegrity_ReusedTextMatchesIndependentRead`) y compara las dos cifras: sobre
+  el corpus dan 99,4075 % las dos.
+- P1 y P2 quedan resueltos: el método que podía hacer `panic` y el que no se usaba ya no existen.
+
+---
+
 ## Pendientes
 
 Decisiones abiertas. Cada una necesita una entrada nueva en este documento cuando se resuelva.
 
 ### P1 — `Converter.ConvertDirectory` puede hacer `panic`
 
-`internal/converter/converter.go:242` calcula la ruta de salida con
-`GetOutputPath(inputPath, "")[len(outputDir)+1:]`: el corte usa una longitud calculada sobre **otra**
-cadena. Si `len(outputDir)+1` supera la longitud del nombre del fichero, el corte queda fuera de
-rango.
+En la versión anterior de `internal/converter/converter.go` (línea 242) calculaba la ruta de salida
+con `GetOutputPath(inputPath, "")[len(outputDir)+1:]`: el corte usa una longitud calculada sobre
+**otra** cadena. Si `len(outputDir)+1` supera la longitud del nombre del fichero, el corte queda
+fuera de rango.
 
 La CLI no lo usa (hace su propio escaneo), así que `mdcaster` no se ve afectado. La biblioteca sí.
 
 **Opciones:** corregir el cálculo, o eliminar el método y dejar solo la versión recursiva, que sí
 funciona.
+
+**Resuelto por [D17](#d17--el-dispatcher-se-parte-por-responsabilidad-y-se-elimina-el-código-muerto).**
+El método se ha eliminado: el `panic` deja de existir.
 
 ### P2 — Escaneo no recursivo frente a la API recursiva
 
@@ -420,6 +479,10 @@ funciona.
 `ConvertDirectoryRecursive`, que sí es recursiva. Ninguna de las dos se usa.
 
 **Opciones:** un flag `--recursive` en la CLI, o eliminar el método recursivo de la biblioteca.
+
+**Resuelto por [D17](#d17--el-dispatcher-se-parte-por-responsabilidad-y-se-elimina-el-código-muerto).**
+Se han eliminado los dos métodos de conversión por directorio. La CLI sigue escaneando solo el
+primer nivel: un eventual `--recursive` es una decisión de la CLI, no de la librería.
 
 ### P3 — Hipervínculos DOCX parseados y no emitidos
 

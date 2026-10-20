@@ -302,15 +302,6 @@ y su `TargetMode`. Los hipervínculos se resuelven para localizar las imágenes.
 **Limitación vigente:** los hipervínculos del cuerpo **no se emiten** en el Markdown. Ver
 [P3](../../../ARCHITECTURE.md#pendientes).
 
-## Utilidades exported
-
-| Función | Contrato |
-|---|---|
-| `IsDocxFile(path string) bool` | `true` si la extensión (minúsculas) es `.docx`. |
-| `GetDocxFiles(dir string) ([]string, error)` | Lista los `.docx` del **primer nivel** de `dir`. No recursivo. Error `ERR_READ_DIR` si no se puede leer. |
-
-Ambas son auxiliares: la CLI usa `factory.IsSupportedFile` y no estas funciones.
-
 ## Gotchas
 
 1. El decoder se detiene en el primer error de XML → el documento entero falla. No hay conversión
@@ -331,17 +322,12 @@ Ambas son auxiliares: la CLI usa `factory.IsSupportedFile` y no estas funciones.
 
 ## Relación con la verificación de integridad
 
-El texto que extrae este processor es la base del cálculo de integridad. Hay **dos** caminos:
+El texto que extrae este processor es la base del cálculo de integridad, y es la **única** fuente:
+`DocxProcessor` guarda el texto plano en `dp.lastText` y lo expone con `ExtractedText()`, y
+`Converter.CheckIntegrity` lo reutiliza. El DOCX no se parsea dos veces.
 
-1. **Con reutilización** (el que usa la CLI): `DocxProcessor` guarda el texto plano en
-   `dp.lastText` y lo expone con `ExtractedText()`. `Converter.CheckIntegrity` lo reutiliza y el
-   DOCX no se parsea dos veces.
-2. **Sin reutilización** (el que usa `converter.CheckIntegrity` a secas): la función
-   `extractDocxContent` (`internal/converter/converter.go`) relee el ZIP y extrae el texto
-   por su cuenta.
-
-Ambos dan el mismo resultado: los dos incluyen el texto de las notas al pie referenciadas, una
-vez cada una. Lo garantiza `TestIntegrity_ReusedTextMatchesFilePath`, que compara las dos cifras y
-falla si difieren.
+El texto incluye el de las notas al pie referenciadas, una vez cada una. La garantía de que no
+pierde nada la comprueba `TestIntegrity_ReusedTextMatchesIndependentRead`, que lee el original por
+una vía independiente y compara las dos cifras.
 
 Ver [../quality/integridad.md](../quality/integridad.md).

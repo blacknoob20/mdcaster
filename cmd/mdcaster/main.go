@@ -169,10 +169,10 @@ func main() {
 }
 
 // processFilesWithConcurrency procesa archivos usando workers concurrentes
-func processFilesWithConcurrency(files []string, outputDir string, numWorkers int, skipBeforeHeading bool) []converter.ConversionResult {
+func processFilesWithConcurrency(files []string, outputDir string, numWorkers int, skipBeforeHeading bool) []ConversionResult {
 	var (
 		wg           sync.WaitGroup
-		results      []converter.ConversionResult
+		results      []ConversionResult
 		resultsMutex sync.Mutex
 		processed    int64
 		totalFiles   = int64(len(files))
@@ -202,7 +202,7 @@ func processFilesWithConcurrency(files []string, outputDir string, numWorkers in
 					integrityPercent = conv.CheckIntegrity(inputFile, outputPath)
 				}
 
-				result := converter.ConversionResult{
+				result := ConversionResult{
 					SourceFile:       inputFile,
 					OutputFile:       outputPath,
 					Success:          err == nil,
@@ -264,7 +264,7 @@ func getIntegritySymbol(percent float64) string {
 }
 
 // printResults muestra el resumen de resultados
-func printResults(results []converter.ConversionResult, startTime time.Time) {
+func printResults(results []ConversionResult, startTime time.Time) {
 	totalDuration := time.Since(startTime)
 	var successCount, errorCount int
 	var totalConversionTime float64

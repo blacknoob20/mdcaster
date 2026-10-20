@@ -39,7 +39,7 @@ estructurado: el PDF no aporta la semántica de títulos y listas que sí tiene 
 `PdfProcessor` no tiene estado: es un struct vacío. `NewPdfProcessor()` (líneas 15-17) devuelve un
 `&PdfProcessor{}`.
 
-## `extractText` — `internal/converter/pdf_processor.go:35-44`
+## `extractText` — `internal/converter/pdf_processor.go:34-43`
 
 ```
 cmd := exec.Command("pdftotext", "-layout", inputPath, "-")
@@ -69,20 +69,11 @@ error extrayendo texto del PDF con pdftotext: %w. Instala 'poppler-utils' o aseg
 
 Este mensaje es **parte del contrato**: nombra la dependencia y la acción correctiva.
 
-## Utilidades exported
-
-| Función | Línea | Contrato |
-|---|---|---|
-| `IsPdfFile(path string) bool` | 47-50 | `true` si la extensión (sin el punto, en minúsculas) es `pdf`. |
-| `GetPdfFiles(dir string) ([]string, error)` | 52-66 | Lista los `.pdf` del **primer nivel** de `dir`. No recursivo. Error `ERR_READ_DIR` si no se puede leer. |
-
-Ambas son auxiliares: la CLI usa `factory.IsSupportedFile`.
-
 ## Relación con la verificación de integridad
 
-**`CheckIntegrity` no soporta PDF.** `extractDocxContent` (en `internal/converter/converter.go:120-148`)
-intenta abrir el fichero como ZIP; un PDF no lo es, así que la función devuelve error y
-`CheckIntegrity` devuelve `0`.
+**`CheckIntegrity` no soporta PDF.** `PdfProcessor` no implementa la interfaz `TextExtractor`, de
+modo que no expone el texto que extrajo y la verificación no tiene con qué comparar: el resultado
+es `0`.
 
 Consecuencia visible: al convertir un PDF, `mdcaster` muestra **🔴 0.0 %** aunque la conversión haya
 sido correcta. No es un fallo de conversión: es una limitación de la medición.

@@ -124,7 +124,7 @@ Reglas:
    │    ├─ outputPath = converter.GetOutputPath(inputFile, outputDir)
    │    ├─ err = conv.ConvertFile(inputFile, outputPath)
    │    ├─ duration = tiempo de la conversión
-   │    ├─ si err == nil → integrityPercent = converter.CheckIntegrity(inputFile, outputPath)
+   │    ├─ si err == nil → integrityPercent = conv.CheckIntegrity(inputFile, outputPath)
    │    ├─ append al slice de resultados (protegido por mutex)
    │    └─ printProgress(current, total, inputFile, ok, integrityPercent)
 4. wg.Wait() → devolver resultados
@@ -238,10 +238,11 @@ USO:
 
 1. El banner se imprime antes de cualquier otra cosa. Cualquier script que parsee la salida debe
    tener en cuenta el banner, el progreso con `\r` y los emojis.
-2. El escaneo de directorios **no es recursivo** aunque `internal/converter` sí ofrezca
-   `ConvertDirectoryRecursive`. La CLI no lo usa.
+2. El escaneo de directorios **no es recursivo**: los ficheros en subcarpetas se ignoran. La
+   librería ya no ofrece ninguna variante recursiva.
 3. `-o` siempre gana sobre `--output` (ver "Resolución de flags").
-4. El porcentaje de un PDF siempre es 0 % (🔴): `CheckIntegrity` solo soporta DOCX.
+4. El porcentaje de un PDF siempre es 0 % (🔴): el processor del PDF no expone su texto, así que
+   la verificación no tiene con qué comparar.
 5. El orden de los ficheros en el resumen no es el de entrada, sino el de finalización de los workers.
 6. `mdcaster` **no** tiene flag de recursividad. Para procesar subcarpetas hay que invocarlo por
    directorio o usar `mdclean` después.

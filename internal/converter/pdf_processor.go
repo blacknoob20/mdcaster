@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 )
 
@@ -41,27 +40,4 @@ func (pp *PdfProcessor) extractText(inputPath string) (string, error) {
 	}
 
 	return strings.TrimSpace(string(out)), nil
-}
-
-// IsPdfFile verifica si un archivo es PDF
-func IsPdfFile(path string) bool {
-	return strings.ToLower(strings.TrimPrefix(filepath.Ext(path), ".")) == "pdf"
-}
-
-// GetPdfFiles obtiene todos los archivos PDF de un directorio
-func GetPdfFiles(dir string) ([]string, error) {
-	var files []string
-
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, fmt.Errorf("error leyendo directorio: %w", err)
-	}
-
-	for _, entry := range entries {
-		if !entry.IsDir() && IsPdfFile(entry.Name()) {
-			files = append(files, filepath.Join(dir, entry.Name()))
-		}
-	}
-
-	return files, nil
 }

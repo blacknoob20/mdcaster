@@ -16,6 +16,7 @@
 | 3 — Documentación | completada | README solo para uso, ARCHITECTURE con D1–D11 y P1–P6, 8 specs actualizados, AGENTS.md reducido a 41 líneas |
 | 4 — Fidelidad DOCX | en curso | Tablas, numeración real, frontmatter, notas al pie e imágenes (D12, D13) |
 | 5 — Cierre de huecos | completada | Subrayado como HTML en línea (D14) y descarte previo (D15) |
+| 6 — Partición por responsabilidad | completada | `mdclean` en cinco ficheros (D16) y el dispatcher en dos, con el código muerto eliminado (D17) |
 
 Verificación final de la fase 0-3: `gofmt` limpio, `go vet` limpio, `go test ./...` en verde,
 compila para linux, darwin y windows (amd64), 52 enlaces markdown y 111 referencias de código
@@ -49,13 +50,15 @@ contenido, misma estructura y la numeración real que muestra Word.
 | D13 | La numeración de listas se resuelve contra `word/numbering.xml`, como en Word | Aceptada |
 | D14 | El subrayado se emite como `<u>texto</u>`, HTML en línea | Aceptada |
 | D15 | El descarte antes del primer encabezado es una opción del processor, no de la CLI | Aceptada |
+| D16 | `mdclean` se parte en cinco ficheros por responsabilidad y se deduplica | Aceptada |
+| D17 | El dispatcher se parte en dos ficheros por responsabilidad y se elimina el código muerto | Aceptada |
 
 ### Pendientes
 
 | ID | Pendiente |
 |---|---|
-| P1 | `Converter.ConvertDirectory` puede hacer `panic`. Corregir o eliminar (la CLI no lo usa) |
-| P2 | `mdcaster` escanea sin recursión, pero la librería sí tiene versión recursiva |
+| P1 | `Converter.ConvertDirectory` puede hacer `panic`. Corregir o eliminar (la CLI no lo usa) | Resuelto por D17 |
+| P2 | `mdcaster` escanea sin recursión, pero la librería sí tiene versión recursiva | Resuelto por D17 |
 | P3 | Los hipervínculos DOCX se parsean y no se emiten. Emitirlos o quitar el parseo |
 | P4 | Un PDF aparece como 0 % (🔴). Mostrar "no medido" en lugar de 0 |
 | P6 | La normalización borra acentos y `ñ` en vez de transliterarlos |

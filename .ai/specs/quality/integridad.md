@@ -19,8 +19,7 @@ El resultado se muestra por fichero (símbolo + porcentaje) y se agrega en el re
 ## Interfaz pública
 
 ```go
-// internal/converter/converter.go
-func CheckIntegrity(sourceFile, markdownFile string) float64
+// internal/converter/integrity.go
 func CheckIntegrityAgainst(originalContent, markdownFile string) float64
 
 // método de Converter
@@ -29,9 +28,8 @@ func (c *Converter) CheckIntegrity(sourceFile, markdownFile string) float64
 
 | Función | Cuándo usarla |
 |---|---|
-| `CheckIntegrity` | Verificación suelta. Lee el original desde disco. |
 | `CheckIntegrityAgainst` | Cuando ya se tiene el texto del original. No lo vuelve a leer. |
-| `Converter.CheckIntegrity` | La que usa la CLI. Reutiliza el texto que el procesador ya extrajo. |
+| `Converter.CheckIntegrity` | La que usa la CLI. Reutiliza el texto que el processor ya extrajo. |
 
 | Aspecto | Contrato |
 |---|---|
@@ -83,25 +81,13 @@ Medido sobre el corpus real:
 **Las cifras bajan.** Es una medida más estricta y por tanto más útil: un 100 % ya no significa
 "nada se perdió" sino "no se detectó nada perdido".
 
-## Extracción del texto original — `extractDocxContent` (`converter.go`)
+## Origen del texto original — el processor
 
-```
-1. zip.OpenReader(docxPath)          → error → 0
-2. Buscar la entrada "word/document.xml"
-   └─ no existe → error "no se encontró document.xml"
-3. extractTextFromXML(contenido)     → texto + ids de notas al pie referenciadas
-4. Leer "word/footnotes.xml" (si existe) y sumar el texto de las notas referenciadas,
-   una vez cada una
-```
+El texto con el que se compara el Markdown **lo extrae el processor al convertir**. No hay una
+segunda lectura del original.
 
-`extractTextFromXML` recorre el XML con `xml.Decoder` y **solo** recoge el contenido de los
-elementos `<w:t>`, añadiendo un espacio después de cada uno. El resto (atributos, nombres de
-elemento) se descarta. Además recoge los `w:footnoteReference` para saber qué notas se suman.
-
-### Atajo: reutilizar el texto ya extraído
-
-`DocxProcessor` guarda el texto plano que extrajo al convertir y lo expone mediante la interfaz
-opcional `TextExtractor`:
+`DocxProcessor` guarda el texto plano que extrajo y lo expone mediante la interfaz opcional
+`TextExtractor`:
 
 ```go
 // internal/converter/processor.go
@@ -110,14 +96,18 @@ type TextExtractor interface {
 }
 ```
 
-`Converter.CheckIntegrity` la usa: si el procesador del original ya extrajo el texto, lo reutiliza
-y **no parsea el DOCX por segunda vez**. Si el procesador no implementa la interfaz, recurre a
-leer el original desde disco.
+`Converter.CheckIntegrity` la usa: si el processor del original implementa la interfaz, reutiliza
+su texto y **no parsea el DOCX por segunda vez**. Si no la implementa (un PDF), el resultado es `0`.
 
-El resultado es idéntico por ambos caminos. Lo garantiza `TestIntegrity_ReusedTextMatchesFilePath`,
-que compara las dos cifras y falla si difieren.
+El texto que guarda el processor incluye el de las **notas al pie referenciadas** en el cuerpo,
+cada una una sola vez, y viene recortado si se activó `--skip-before-heading`.
 
-## Normalización — `normalizeContent` (`converter.go`)
+Antes había una segunda vía: la librería releía el original desde disco con un parser propio
+(`extractDocxContent`). Se ha eliminado por duplicar el parseo del DOCX. La garantía de que el
+texto del processor no pierde nada la comprueba `TestIntegrity_ReusedTextMatchesIndependentRead`,
+que lee el original por una vía independiente y compara las dos cifras.
+
+## Normalización — `normalizeContent` (`integrity.go`)
 
 ```
 1. strings.ToLower(content)
@@ -169,8 +159,8 @@ por el valor 0.
 
 ## Limitación vigente: **solo DOCX**
 
-La extracción del original abre el fichero como **ZIP**. Un PDF no lo es, así que la extracción
-falla y se devuelve `0`.
+La verificación mide el texto que expone el processor, y el del PDF no lo expone: `PdfProcessor`
+no implementa `TextExtractor`, así que el resultado es `0`.
 
 **Consecuencia visible:** al convertir un PDF, `mdcaster` muestra **🔴 0.0 %** aunque la conversión
 haya sido perfectamente correcta. El porcentaje de un PDF **no significa nada** hoy.
@@ -216,7 +206,7 @@ corpus institucional.
 |---|---|
 | `TestIntegrity_DocxToMarkdownContainsOriginalText` | El Markdown contiene el texto original normalizado, o al menos sus 50 primeras palabras. Es **más estricta** que la función en runtime: el test verifica "el Markdown contiene el original", la función calcula "qué fracción de tokens aparece". |
 | `TestIntegrity_DocxReportsCoverage` | El porcentaje está en (0, 100] para un DOCX convertido. |
-| `TestIntegrity_ReusedTextMatchesFilePath` | Reutilizar el texto del procesador da la misma cifra que releer el original. |
+| `TestIntegrity_ReusedTextMatchesIndependentRead` | El texto que el processor ya extrajo da la misma cifra que una lectura independiente del original. |
 | `TestIntegrity_PdfIsNotMeasurable` | Documenta el límite actual: un PDF da 0. Cuando se resuelva P4, este test debe cambiar. |
 
 ## Gotchas

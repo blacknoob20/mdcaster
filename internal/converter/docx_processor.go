@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -221,28 +220,4 @@ func cleanMarkdown(content string) string {
 	content = strings.Join(cleaned, "\n")
 
 	return strings.TrimSpace(content)
-}
-
-// IsDocxFile verifica si un archivo es DOCX
-func IsDocxFile(path string) bool {
-	ext := strings.ToLower(filepath.Ext(path))
-	return ext == ".docx"
-}
-
-// GetDocxFiles obtiene todos los archivos DOCX de un directorio
-func GetDocxFiles(dir string) ([]string, error) {
-	var files []string
-
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, fmt.Errorf("error leyendo directorio: %w", err)
-	}
-
-	for _, entry := range entries {
-		if !entry.IsDir() && IsDocxFile(entry.Name()) {
-			files = append(files, filepath.Join(dir, entry.Name()))
-		}
-	}
-
-	return files, nil
 }

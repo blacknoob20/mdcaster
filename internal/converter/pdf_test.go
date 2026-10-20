@@ -43,7 +43,8 @@ func TestConvertPdf_CreatesTextFile(t *testing.T) {
 }
 
 // TestIntegrity_PdfIsNotMeasurable documenta el límite actual: la verificación
-// de integridad solo sabe leer DOCX, así que sobre un PDF devuelve 0.
+// de integridad solo sabe medir el texto que extrae el processor, y el del PDF
+// no lo expone, así que sobre un PDF devuelve 0.
 //
 // Cuando se implemente P4 (mostrar "no medido" en lugar de 0), este test
 // deberá cambiar para comprobar ese valor.
@@ -60,7 +61,7 @@ func TestIntegrity_PdfIsNotMeasurable(t *testing.T) {
 		t.Fatalf("Convert falló: %v", err)
 	}
 
-	percent := CheckIntegrity(input, out)
+	percent := conv.CheckIntegrity(input, out)
 	t.Logf("integridad sobre PDF: %.2f%%", percent)
 
 	if percent != 0 {
