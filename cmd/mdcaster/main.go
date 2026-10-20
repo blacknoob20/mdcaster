@@ -11,8 +11,6 @@ import (
 	"time"
 
 	"mdcaster/internal/converter"
-
-	"github.com/fatih/color"
 )
 
 const (
@@ -24,15 +22,6 @@ const (
 ║                    Powered by Go 🚀                           ║
 ╚═══════════════════════════════════════════════════════════════╝
 `
-)
-
-var (
-	// Colores para la salida
-	success   = color.New(color.FgGreen, color.Bold)
-	info      = color.New(color.FgCyan)
-	warning   = color.New(color.FgYellow)
-	errorMsg  = color.New(color.FgRed, color.Bold)
-	highlight = color.New(color.FgMagenta, color.Bold)
 )
 
 func main() {
