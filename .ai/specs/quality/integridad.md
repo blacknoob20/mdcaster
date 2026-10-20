@@ -89,12 +89,14 @@ Medido sobre el corpus real:
 1. zip.OpenReader(docxPath)          → error → 0
 2. Buscar la entrada "word/document.xml"
    └─ no existe → error "no se encontró document.xml"
-3. extractTextFromXML(contenido)
+3. extractTextFromXML(contenido)     → texto + ids de notas al pie referenciadas
+4. Leer "word/footnotes.xml" (si existe) y sumar el texto de las notas referenciadas,
+   una vez cada una
 ```
 
 `extractTextFromXML` recorre el XML con `xml.Decoder` y **solo** recoge el contenido de los
 elementos `<w:t>`, añadiendo un espacio después de cada uno. El resto (atributos, nombres de
-elemento) se descarta.
+elemento) se descarta. Además recoge los `w:footnoteReference` para saber qué notas se suman.
 
 ### Atajo: reutilizar el texto ya extraído
 
@@ -176,11 +178,25 @@ haya sido perfectamente correcta. El porcentaje de un PDF **no significa nada** 
 Regla para la CLI: un 🔴 en un PDF **no es** un fallo de conversión. No debe usarse para
 diagnosticar problemas con PDF. Ver [P4](../../../ARCHITECTURE.md#pendientes).
 
-## Limitación vigente: tablas y estructura
+## Limitación vigente: la métrica no mide estructura
 
-La extracción compara **texto**, no estructura. Un DOCX con tablas perderá las celdas como tabla
-pero conservará el texto: el porcentaje puede ser alto aunque el Markdown no tenga estructura de
-tabla. La métrica no mide fidelidad estructural.
+La extracción compara **texto**, no estructura. El texto de una tabla se conserva tanto si el
+Markdown tiene tabla como si no: el porcentaje puede ser alto sin que la estructura se haya
+mantenido. La métrica no mide fidelidad estructural.
+
+Con la conversión de tablas, el frontmatter y las notas al pie, el texto del Markdown es una
+superset del original en esos puntos, y el porcentaje se mantiene entre el 97 % y el 100 % en el
+corpus institucional.
+
+## Qué mide la métrica ahora
+
+| Elemento | ¿Cuenta para la integridad? |
+|---|---|
+| Párrafos y tablas | Sí |
+| Frontmatter (`author`, `date`, `updated`) | No: son metadatos, no texto del documento |
+| Notas al pie | Sí: su texto se suma al original y aparece en el Markdown |
+| Etiquetas de lista (`1.`, `a)`, `2.1.`) | No: los marcadores no son texto del documento |
+| Imágenes | No: no tienen texto |
 
 ## Reglas para cambios futuros
 

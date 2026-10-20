@@ -32,7 +32,7 @@ y poder demostrarlo con un porcentaje de integridad por archivo.
 | **CLI limpieza** | `cmd/mdclean/` | Normalización de Markdown (genérica o TDR), escritura a stdout o in-place |
 | **Dispatcher** | `internal/converter/converter.go` | API interna (`Converter`), conversión por archivo y por directorio, `CheckIntegrity` |
 | **Factory** | `internal/converter/processor.go` | Interfaz `FileProcessor`, registro y resolución de procesadores por extensión |
-| **Procesadores** | `internal/converter/docx_processor.go`, `pdf_processor.go` | Conversión específica por formato |
+| **Procesadores** | `internal/converter/docx_processor.go`, `docx_parser.go`, `docx_render.go`, `docx_numbering.go`, `docx_footnotes.go`, `docx_frontmatter.go`, `docx_images.go`, `pdf_processor.go` | Conversión específica por formato |
 
 Dependencias:
 
@@ -97,13 +97,20 @@ Entrada (.md)
 | Umbral 🟡 | `>= 80` | `cmd/mdcaster/main.go:252` |
 | Umbral 🟠 | `>= 50` | `cmd/mdcaster/main.go:254` |
 | Umbral 🔴 | `< 50` | `cmd/mdcaster/main.go:256` |
-| Línea de texto DOCX | 2 espacios por `w:tab`, `\n` por `w:br` | `internal/converter/docx_processor.go:185-192` |
-| Negrita / cursiva / tachado | `**x**`, `*x*`, `~~x~~` | `internal/converter/docx_processor.go:217-225` |
-| Heading por estilo | `Heading1..6` / `Título1..6` → `#`..`######` | `internal/converter/docx_processor.go:272-283` |
-| Título / Subtítulo | `#` / `##` | `internal/converter/docx_processor.go:284-287` |
-| Listas | `"- "` + indentación de 2 espacios por nivel | `internal/converter/docx_processor.go:290-294` |
-| Sangrado de listas | `"  " * nivel` (nivel 0 = sin sangrado) | `internal/converter/docx_processor.go:292` |
-| Línea en blanco tras párrafo | 1 si es lista, 2 si no | `internal/converter/docx_processor.go:247-251` |
+| Línea de texto DOCX | 2 espacios por `w:tab`, `\n` por `w:br` | `internal/converter/docx_parser.go` |
+| Negrita / cursiva / tachado | `**x**`, `*x*`, `~~x~~` | `internal/converter/docx_parser.go` |
+| Heading por estilo | `Heading1..6` / `Título1..6` → `#`..`######` | `internal/converter/docx_render.go` |
+| Título / Subtítulo | `#` / `##` | `internal/converter/docx_render.go` |
+| Listas | numeración real de `word/numbering.xml`; viñeta `- `, decimal `N. ` | `internal/converter/docx_numbering.go` |
+| Etiquetas no decimales | `<ol type="a" start="N">` (HTML) | `internal/converter/docx_render.go` |
+| Etiquetas compuestas (`2.1.`) | línea literal | `internal/converter/docx_render.go` |
+| Sangría de listas | columna de contenido del marcador del padre | `internal/converter/docx_render.go` |
+| Tablas DOCX | tabla Markdown: primera fila como cabecera | `internal/converter/docx_render.go` |
+| Celdas combinadas | `gridSpan` y `vMerge` dejan las posiciones vacías | `internal/converter/docx_render.go` |
+| Frontmatter | `docProps/core.xml` → `author`, `date`, `updated`; solo si hay metadatos | `internal/converter/docx_frontmatter.go` |
+| Notas al pie | `[^id]` en el cuerpo y `[^id]: texto` al final | `internal/converter/docx_footnotes.go` |
+| Imágenes | extraídas a `<nombre>_assets/` y enlazadas | `internal/converter/docx_images.go` |
+| Línea en blanco tras párrafo | 1 si es lista, 2 si no | `internal/converter/docx_render.go` |
 | Comandos PDF | `pdftotext -layout <in> -` | `internal/converter/pdf_processor.go:37` |
 | Salida PDF | texto plano sin estructura Markdown | `internal/converter/pdf_processor.go:43` |
 | Expresiones regulares | compiladas **una vez**, al inicio del paquete | `cmd/mdclean/main.go:24-58` |
@@ -123,12 +130,14 @@ Entrada (.md)
 | `ERR_INPUT_DIR_NOT_FOUND` | `internal/converter/converter.go:221` | `directorio de entrada no encontrado: %w` |
 | `ERR_READ_DIR` | `internal/converter/converter.go:232` | `error leyendo directorio: %w` |
 | `ERR_WALK_DIR` | `internal/converter/converter.go:340` | `error al procesar directorio: %w` |
-| `ERR_DOCX_OPEN` | `internal/converter/docx_processor.go:38` | `error abriendo archivo DOCX: %w` |
-| `ERR_DOCX_NO_DOCUMENT_XML` | `internal/converter/docx_processor.go:62` | `no se encontró document.xml en el archivo DOCX` |
-| `ERR_DOCX_READ_XML` | `internal/converter/docx_processor.go:51` | `error leyendo document.xml: %w` |
-| `ERR_DOCX_READ_RELS` | `internal/converter/docx_processor.go:56` | `error leyendo relationships: %w` |
-| `ERR_DOCX_PARSE` | `internal/converter/docx_processor.go:73` | `error parseando documento: %w` |
-| `ERR_WRITE_MARKDOWN` | `internal/converter/docx_processor.go:78`, `pdf_processor.go:28` | `error escribiendo archivo Markdown: %w` |
+| `ERR_DOCX_OPEN` | `internal/converter/docx_processor.go` | `error abriendo archivo DOCX: %w` |
+| `ERR_DOCX_NO_DOCUMENT_XML` | `internal/converter/docx_processor.go` | `no se encontró document.xml en el archivo DOCX` |
+| `ERR_DOCX_READ_XML` | `internal/converter/docx_processor.go` | `error leyendo word/document.xml: %w` |
+| `ERR_DOCX_READ_RELS` | `internal/converter/docx_processor.go` | `error leyendo word/_rels/document.xml.rels: %w` |
+| `ERR_DOCX_PARSE` | `internal/converter/docx_processor.go` | `error parseando documento: %w` |
+| `ERR_DOCX_ASSETS_DIR` | `internal/converter/docx_images.go` | `error creando la carpeta de imágenes: %w` |
+| `ERR_DOCX_ASSET_WRITE` | `internal/converter/docx_images.go` | `error escribiendo la imagen %s: %w` |
+| `ERR_WRITE_MARKDOWN` | `internal/converter/docx_processor.go`, `pdf_processor.go` | `error escribiendo archivo Markdown: %w` |
 | `ERR_PDFTOTEXT` | `internal/converter/pdf_processor.go:40` | `error extrayendo texto del PDF con pdftotext: %w. Instala 'poppler-utils' o asegura que 'pdftotext' esté en PATH` |
 | `ERR_MDC_INPUT_MISSING` | `cmd/mdcaster/main.go:77` | `❌ Error: Debe especificar un archivo o carpeta de entrada` → **exit 1** |
 | `ERR_MDC_PATH_NOT_FOUND` | `cmd/mdcaster/main.go:87` | `❌ Error: La ruta '%s' no existe` → **exit 1** |
@@ -215,11 +224,13 @@ entrada en [`ARCHITECTURE.md`](../../ARCHITECTURE.md#pendientes).
 | 3 | `internal/converter/converter.go:185-196` | `normalizeContent` filtra con `[^a-z0-9\s]`, que **borra** los caracteres acentuados y la `ñ` en vez de normalizarlos: `técnica` → `tcnica`. | Medio: la integridad se calcula sobre tokens degradados. Consistente entre original y Markdown, por lo que no rompe la comparación, pero penaliza la precisión. |
 | 4 | `internal/converter/processor.go:57` | `RegisterProcessor` no normaliza la extensión a minúsculas. | Bajo: registrar `.DOCX` crearía una entrada inalcanzable. |
 | 5 | `internal/converter/processor.go:62-69` | `SupportedExtensions()` itera un map → **orden no determinista**. | Bajo: la lista de extensiones que muestra la CLI cambia entre ejecuciones. |
-| 6 | `internal/converter/docx_processor.go:110-121` | Las relaciones (hipervínculos) se parsean y guardan, pero **nunca se emiten** al Markdown. | Bajo: los enlaces del DOCX se pierden. |
-| 7 | `internal/converter/docx_processor.go:177-182` | `<w:b w:val="0"/>` (negrita explícitamente desactivada) activa igualmente la negrita. | Bajo: énfasis espurio en algunos documentos. |
+| 6 | `internal/converter/docx_processor.go` | Las relaciones (hipervínculos) se parsean y guardan, pero **nunca se emiten** al Markdown. | Bajo: los enlaces del DOCX se pierden. |
+| 7 | `internal/converter/docx_render.go` | Los párrafos numerados **dentro de una celda de tabla** no emiten marcador: la celda muestra su texto. | Bajo: las etiquetas de listas dentro de tablas se pierden, también en `docx2md`. |
 | 8 | `cmd/mdcaster/main.go:318-321` | "Speedup por concurrencia" se calcula como `suma(tiempos) / tiempoTotal`, es decir **eficiencia de paralelismo**, no speedup. Con 1 worker da ~1.0x. | Bajo: etiqueta engañosa en el reporte. |
 | 9 | `internal/converter/converter.go:353-364` | `ByteCountSI` usa base 1000 y el sufijo `kB` (no `KB`). La función **no se usa** en ninguna CLI. | Bajo: código muerto. |
 | 10 | `cmd/mdcaster/main.go:100-114` | El escaneo de carpetas no es recursivo pese a que la librería sí tiene `ConvertDirectoryRecursive`. | Medio: los ficheros en subcarpetas se ignoran silenciosamente. |
+| 11 | `internal/converter/docx_render.go` | Las etiquetas de lista no decimales se emiten como HTML (`<ol type="a">`), donde Markdown no se procesa. | Bajo: el contenido del `<li>` se emite con HTML en línea, no con `**` y `*`. |
+| 12 | `internal/converter/docx_render.go` | Las celdas combinadas (`gridSpan`, `vMerge`) se aplanan a celdas vacías: Markdown no tiene celdas combinadas. | Bajo: la estructura de la tabla se simplifica, el texto no se pierde. |
 
 ## Índice de referencias
 

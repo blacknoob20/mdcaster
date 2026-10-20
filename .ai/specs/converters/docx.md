@@ -1,16 +1,18 @@
-# SPEC — `internal/converter/docx_processor.go` (DOCX → Markdown)
+# SPEC — Conversión DOCX → Markdown
 
 **Módulo:** `converters/docx`
-**Código:** `internal/converter/docx_processor.go`
-**Implementa:** `converter.FileProcessor`
-**Dependencias:** solo biblioteca estándar (`archive/zip`, `encoding/xml`)
+**Código:** `internal/converter/docx_processor.go`, `docx_parser.go`, `docx_render.go`,
+`docx_numbering.go`, `docx_footnotes.go`, `docx_frontmatter.go`, `docx_images.go`
+**Implementa:** `converter.FileProcessor` y `converter.TextExtractor`
+**Dependencias:** solo biblioteca estándar (`archive/zip`, `encoding/xml`, `regexp`, `strconv`)
 
 ---
 
 ## Responsabilidad
 
-Convertir un `.docx` (paquete OOXML = ZIP con XML) a Markdown preservando la estructura de
-párrafos, los estilos de título, el énfasis y las listas.
+Convertir un `.docx` (paquete OOXML = ZIP con XML) a Markdown preservando la estructura del
+documento: párrafos, estilos de título, énfasis, listas con su numeración real, tablas, notas al
+pie, imágenes y metadatos.
 
 ## Entrada / salida
 
@@ -18,6 +20,7 @@ párrafos, los estilos de título, el énfasis y las listas.
 |---|---|
 | Entrada | Ruta a un `.docx` válido (ZIP con `word/document.xml`) |
 | Salida | Fichero Markdown en `outputPath`, permisos `0644` |
+| Salida secundaria | Carpeta `<nombre>_assets/` junto al Markdown, solo si el documento tiene imágenes |
 | Extensión registrada | `.docx` (minúsculas) |
 
 ## Estructura del paquete OOXML leída
@@ -25,180 +28,284 @@ párrafos, los estilos de título, el énfasis y las listas.
 | Entrada del ZIP | Uso | Obligatoria |
 |---|---|---|
 | `word/document.xml` | Cuerpo del documento | **Sí** → si falta: `ERR_DOCX_NO_DOCUMENT_XML` |
-| `word/_rels/document.xml.rels` | Relaciones (hipervínculos) | No (opcional) |
+| `word/_rels/document.xml.rels` | Relaciones (hipervínculos, imágenes) | No (opcional) |
+| `word/numbering.xml` | Definiciones de numeración de listas | No (opcional) |
+| `word/footnotes.xml` | Notas al pie | No (opcional) |
+| `docProps/core.xml` | Metadatos del documento (frontmatter) | No (opcional) |
 
-Cualquier otra entrada del ZIP se ignora.
+Cualquier otra entrada del ZIP se ignora, salvo las de `word/media/` que se extraen cuando el
+cuerpo las referencia.
 
-## Flujo de `Process` — `internal/converter/docx_processor.go:30-84`
+## Flujo de `Process`
 
 ```
-1. Reset de dp.relationships y dp.lastText  ← aisla el estado entre ficheros
-2. zip.OpenReader(inputPath)                → ERR_DOCX_OPEN
-3. Lectura de document.xml y document.xml.rels
+1. Reset de dp.relationships y dp.lastText   ← aisla el estado entre ficheros
+2. zip.OpenReader(inputPath)                 → ERR_DOCX_OPEN
+3. Lectura de las cinco partes del paquete
 4. Si no hay document.xml → ERR_DOCX_NO_DOCUMENT_XML
-5. parseRelationships(rels)                 ← opcional, solo hipervínculos
-6. parseDocument(documentContent)           → ERR_DOCX_PARSE
-7. dp.lastText = texto plano extraído
-8. os.WriteFile(outputPath, markdown, 0644) → ERR_WRITE_MARKDOWN
+5. parseRelationships(rels)                  ← hipervínculos e imágenes
+6. parseDocxNumbering(numbering)            ← opcional
+7. parseDocxFootnotes(footnotes)            ← opcional
+8. parseDocxCoreProps(core)                  ← opcional
+9. parseDocxDocument(document)               → ERR_DOCX_PARSE
+10. extractDocxImages(...)                   ← extrae a <nombre>_assets/
+11. resolveDocxImages(...)                   ← sustituye los marcadores por enlaces
+12. renderDocument(...)                      → Markdown
+13. Se antepone el frontmatter y se anexan las definiciones de notas al pie
+14. dp.lastText = texto plano (cuerpo + notas al pie)
+15. os.WriteFile(outputPath, markdown, 0644) → ERR_WRITE_MARKDOWN
 ```
 
 El reset del paso 1 es obligatorio: `DocxProcessor` guarda estado en el struct y la misma
 instancia puede procesar varios ficheros (la CLI crea un `Converter` por worker, pero un worker
 procesa varios ficheros con la misma instancia).
 
-### `parseDocument` devuelve dos valores
+## Modelo de documento
 
-```go
-func (dp *DocxProcessor) parseDocument(content []byte) (string, string, error)
-```
+El parseo produce un modelo de bloques, no texto plano:
 
-Devuelve el **Markdown** y el **texto plano** del documento. El texto plano se acumula en el
-mismo recorrido del XML (cada `<w:t>` aporta su texto y un espacio) y se guarda en `dp.lastText`,
-para que la verificación de integridad no tenga que parsear el DOCX por segunda vez.
+| Tipo | Contenido |
+|---|---|
+| `docxBlock` | Bloque del cuerpo: párrafo o tabla, en orden |
+| `docxParagraph` | Estilo (`w:pStyle`), lista (`numId`, `ilvl`), texto y fragmentos con formato |
+| `docxTable` / `docxRow` / `docxCell` | Tabla, filas y celdas |
+| `docxCell` | `gridSpan`, `vMerge` y el texto de sus párrafos |
+| `inlineSpan` | Fragmento de texto con negrita, cursiva, tachado y marca de "texto literal" |
 
-El texto plano se expone con `ExtractedText()`, que implementa la interfaz opcional
-[`TextExtractor`](../converter/factory.md). Ver [../quality/integridad.md](../quality/integridad.md).
+El texto plano para la verificación de integridad se acumula en el mismo recorrido: cada
+`<w:t>` aporta su texto y un espacio.
 
-## Reglas de parseo del documento — `parseDocument` (líneas 128-259)
+## Reglas de parseo del documento
 
-Recorre el XML con `xml.Decoder` y usa un **decoder de tokens**, no `Unmarshal`, para poder
-detectar el cierre de cada elemento.
+El recorrido usa `xml.Decoder` con **decoder de tokens**, no `Unmarshal`, para poder distinguir
+el cierre de cada elemento.
 
 ### Elementos StartElement
 
-| Elemento | Efecto | Referencia |
-|---|---|---|
-| `p` | Inicia párrafo: resetea texto, estilo, flag de lista y nivel | 157-162 |
-| `pStyle` | Guarda el valor del atributo `val` como `paragraphStyle` | 163-168 |
-| `numPr` | Marca el párrafo como elemento de lista | 169-170 |
-| `ilvl` | Lee el atributo `val` como nivel de lista (int) | 171-176 |
-| `b` | Activa negrita | 177-178 |
-| `i` | Activa cursiva | 179-180 |
-| `strike` | Activa tachado | 181-182 |
-| `t` | Apila un buffer de texto | 183-184 |
-| `tab` | Escribe **2 espacios** en el párrafo | 185-188 |
-| `br` | Escribe `\n` en el párrafo | 189-192 |
+| Elemento | Efecto |
+|---|---|
+| `p` | Inicia párrafo: resetea estilo, lista y formato en línea |
+| `pPr` | Marca el inicio de las propiedades del párrafo |
+| `pStyle` | Guarda el valor de `val` como estilo del párrafo |
+| `numPr` | Marca el párrafo como elemento de lista (solo dentro de `pPr`) |
+| `ilvl` | Nivel de lista (int) |
+| `numId` | Identificador de la lista |
+| `r` | Inicia un run |
+| `rPr` | Propiedades del run (solo cuentan dentro de `r`) |
+| `b`, `i`, `strike` | Activan negrita, cursiva y tachado |
+| `t` | Apila un buffer de texto |
+| `tab` | Escribe **2 espacios** |
+| `br` | Escribe `\n` |
+| `tbl`, `tr`, `tc` | Estructura de tabla |
+| `gridSpan` | Número de columnas que ocupa la celda |
+| `vMerge` | Unión vertical: `restart` la abre, sin valor la continúa |
+| `footnoteReference` | Referencia a una nota al pie; emite `[^id]` |
+| `blip` (DrawingML), `imagedata` (VML) | Referencia a una imagen por `r:embed` / `r:id` |
+| `docPr` | Texto alternativo de la imagen que viene a continuación |
 
-### Elementos EndElement
+### Espacios de nombres
 
-| Elemento | Efecto | Referencia |
-|---|---|---|
-| `t` | Saca el buffer, acumula el texto plano, aplica énfasis y lo escribe en el párrafo | 205-231 |
-| `r` | **Resetea** negrita, cursiva y tachado (fin de run) | 232-236 |
-| `p` | Cierra el párrafo: trim, limpieza, estilo y escritura | 237-252 |
+Solo se interpretan los elementos de WordprocessingML. El namespace se comprueba por URI
+(`…/wordprocessingml/2006/main` y su variante estricta); un prefijo sin resolver se asume Word.
+Los elementos de otros formatos (DrawingML, VML) no se confunden con los de Word: `a:t` no es
+`w:t`.
 
-### CharData
-
-Se acumula en el buffer de texto del tope de la pila (`textStack`). Si la pila está vacía
-(texto fuera de un `<w:t>`), el contenido se descarta.
-
-### Formato aplicado al cerrar `<w:t>`
-
-Orden de aplicación (líneas 217-225):
-
-1. Negrita → `**texto**`
-2. Cursiva → `*texto*`
-3. Tachado → `~~texto~~`
-
-El texto vacío se descarta: no se emiten marcas de énfasis sin contenido.
-
-## Cierre de párrafo — `internal/converter/docx_processor.go:237-252`
+### Cierre de párrafo
 
 ```
-1. content = TrimSpace(currentParagraph)
-2. content = cleanFormatting(content)
-3. Si content == "" → el párrafo NO se escribe (párrafo vacío se descarta)
-4. line = applyParagraphStyle(content, paragraphStyle, isListItem, listLevel)
-5. Se escribe line + "\n"
-6. Si NO es lista → se escribe un "\n" adicional (línea en blanco entre párrafos)
+1. text = render de los fragmentos en Markdown
+2. text = TrimSpace(text)
+3. text = cleanFormatting(text)
+4. Si text == "" y el párrafo NO estaba numerado → el párrafo NO se escribe
+5. Si text == "" y el párrafo estaba numerado → se conserva: consume su número, como en Word
+6. Si el párrafo está dentro de una celda → el texto pasa a la celda
+7. Si no → se escribe el bloque de párrafo
 ```
 
-Consecuencia: dos párrafos de texto normal quedan separados por **una línea en blanco**; los
-elementos de lista quedan **contiguos**.
+### Formato en línea
 
-## `applyParagraphStyle` — `internal/converter/docx_processor.go:267-297`
+Cada `<w:t>` cerrado produce un fragmento con el formato vigente. Los fragmentos consecutivos con
+el mismo formato se fusionan, de modo que dos runs en negrita seguidos dan `**texto**` y no
+`**a****b**`.
 
-Se evalúa en este orden (el primero que coincide gana):
+El énfasis se aplica sobre el texto sin los espacios que lo rodean: `**texto **` se emite como
+`**texto** `, porque `**texto **` no es énfasis válido en Markdown.
 
-| # | Condición (sobre `strings.ToLower(style)`) | Salida |
-|---|---|---|
-| 1 | contiene `heading1` \| `título1` \| `ttulo1` | `# ` + contenido |
-| 2 | … `heading2` \| `título2` \| `ttulo2` | `## ` + contenido |
-| 3 | … `heading3` \| `título3` \| `ttulo3` | `### ` + contenido |
-| 4 | … `heading4` \| `título4` \| `ttulo4` | `#### ` + contenido |
-| 5 | … `heading5` \| `título5` \| `ttulo5` | `##### ` + contenido |
-| 6 | … `heading6` \| `título6` \| `ttulo6` | `###### ` + contenido |
-| 7 | contiene `title` \| `título` \| `ttulo` | `# ` + contenido |
-| 8 | contiene `subtitle` | `## ` + contenido |
-| 9 | `isList == true` | `"  " * nivel` + `"- "` + contenido |
-| 10 | resto | contenido sin prefijo |
+| Formato | Marcado |
+|---|---|
+| Negrita | `**texto**` |
+| Cursiva | `*texto*` |
+| Tachado | `~~texto~~` |
 
-Reglas:
+Las propiedades de la **marca de párrafo** (`w:pPr/w:rPr`) no se aplican al texto: describen el
+párrafo, no sus runs. Una negrita desactivada (`<w:b w:val="0"/>`) no activa la negrita.
 
-1. La detección es por **subcadena** del nombre del estilo, no por igualdad. `Heading1` se detecta
-   antes que `title` porque las reglas de heading se evalúan primero.
-2. Los alias `título` / `ttulo` cubren estilos con y sin tilde (el nombre del estilo depende del
-   idioma de Word).
-3. El nivel de lista viene de `w:ilvl`; nivel 0 → sin sangrado, nivel 1 → 2 espacios, etc.
-4. Un párrafo con estilo de título **y** `numPr` se renderiza como título: las reglas de heading
-   se evalúan antes que las de lista.
+### Estilos de párrafo
 
-## Post-proceso del Markdown
+`paragraphPrefix` devuelve el prefijo del párrafo, o la cadena vacía si no es un título. La
+detección es por **subcadena** del nombre del estilo, no por igualdad:
 
-### `cleanFormatting` — `internal/converter/docx_processor.go:304-312`
+| Estilo (minúsculas) | Prefijo |
+|---|---|
+| `heading1` \| `título1` \| `ttulo1` | `# ` |
+| `heading2` … `heading6` (y variantes) | `## ` … `###### ` |
+| `title` \| `título` \| `ttulo` | `# ` |
+| `subtitle` | `## ` |
 
-1. `****` → `**` (colapsa énfasis duplicado).
-2. Elimina las marcas `**` vacías (`** **`).
-
-### `cleanMarkdown` — `internal/converter/docx_processor.go:315-334`
-
-1. Colapsa 3+ saltos de línea consecutivos → 2.
-2. Elimina espacios y tabulaciones al final de cada línea.
-3. `****` → `**` (segunda pasada, por si el formato se reintrodujo).
-4. `**\n**` → `\n` (elimina énfasis vacío partido en dos líneas).
-5. `TrimSpace` del resultado completo.
-
-El resultado final **no** empieza ni termina con líneas en blanco.
+Un párrafo con estilo de título **y** numerado se renderiza como título, pero **conserva la
+etiqueta** de lista: `## 2.1. Justificación Técnica`.
 
 ## Tablas
 
-El parser **no** interpreta la estructura de tablas de Word: no hay lógica de `<w:tbl>`, `<w:tr>`
-ni `<w:tc>`. El texto de las celdas sí se captura (vive en `<w:t>`) y se emite como párrafos
-planos, **sin** estructura de tabla Markdown.
+Las tablas se convierten a tablas Markdown. Reglas:
 
-Esto es intencional: el README declara "sin tablas Markdown complejas, solo texto fácil de leer".
+1. La **primera fila** es la cabecera. Se emite la fila de cabeceras y la fila de separadores
+   (`| --- | --- |`).
+2. Todas las filas se normalizan al número de columnas de la tabla: las filas cortas se rellenan
+   con celdas vacías.
+3. `w:gridSpan`: la celda ocupa varias columnas. El texto va en la primera y las demás quedan
+   vacías.
+4. `w:vMerge`: la celda que abre la unión (`restart`) conserva el texto; las que la continúan
+   quedan vacías, aunque traigan texto.
+5. El texto de una celda son sus párrafos separados por `<br>`.
+6. Se escapan las barras verticales del texto: `|` → `\|`.
+7. Una tabla **anidada** dentro de una celda se aplana a texto: sus filas se unen con ` | ` y se
+   añaden como líneas de la celda.
+8. Los párrafos de una celda **no** llevan marcador de lista: la celda muestra su texto.
+
+## Listas
+
+La numeración real se resuelve leyendo `word/numbering.xml`.
+
+### Resolución de la etiqueta
+
+```
+a        = w:num[@numId=nid]/w:abstractNumId
+lvl      = abstractNum[a]/w:lvl[@w:ilvl=ilvl]
+fmt,text = lvl/w:numFmt, lvl/w:lvlText
+start    = w:num[@numId=nid]/w:lvlOverride[@w:ilvl=ilvl]/w:startOverride
+           ?? lvl/w:start ?? 1
+
+contadores por (numId, ilvl):
+  primera vez → start ; después → +1
+  al avanzar (numId, ilvl) → se reinician los niveles más profundos, según w:lvlRestart:
+     ausente  → se reinicia cuando cualquier nivel más superficial avanza
+     0        → nunca se reinicia
+     N        → se reinicia cuando avanza el nivel N-1
+
+etiqueta = text sustituyendo cada %k por el contador del nivel k-1, formateado con el
+           numFmt de ese nivel (decimal · lowerLetter · upperLetter · lowerRoman · upperRoman)
+           w:isLgl presente → ese nivel se formatea como decimal
+```
+
+Los contadores **no** se reinician al cambiar de `numId`: Word mantiene una numeración continua
+por instancia de lista.
+
+### Formas de render
+
+| Caso | Render |
+|---|---|
+| `numFmt` = `bullet` | Viñeta Markdown: `- ` |
+| `numFmt` decimal y la etiqueta es `N.` o `N)` | Lista ordenada Markdown: `N. ` |
+| `numFmt` `lowerLetter` / `upperLetter` / `lowerRoman` / `upperRoman` | Bloque HTML `<ol type="a" start="N">` |
+| Etiqueta compuesta (`%1.%2.`) | Línea literal: `2.1. texto` |
+| Sin `numbering.xml` o sin definición del `numId` | Viñeta Markdown: `- ` |
+
+Markdown no admite marcadores de lista ordenada que no sean dígitos: las etiquetas alfabéticas y
+romanas se emiten como HTML, y las compuestas como texto literal, que es la única forma de que la
+etiqueta llegue intacta.
+
+En un bloque `<ol>` el Markdown no se procesa, así que el contenido del `<li>` se emite con HTML
+en línea (`<strong>`, `<em>`, `<del>`) en lugar de `**`, `*` y `~~`.
+
+### Sangría
+
+La sangría de un elemento es la **columna de contenido de su elemento padre**: el número de
+caracteres del marcador del padre más su sangría. Así `1. ` deja la columna en 3 y un nivel
+anidado se sangra 3 espacios; una viñeta `- ` deja la columna en 2 y su nivel anidado se sangra 2.
+
+La columna se guarda **por lista**: un elemento anidado puede aparecer en un tramo distinto del
+que tiene su padre y la sangría debe conservarse. Si el nivel padre no aparece en el cuerpo, se
+usa la sangría habitual de dos espacios por nivel.
+
+## Notas al pie
+
+`word/footnotes.xml` se lee si existe. Las notas estructurales de Word (`separator`,
+`continuationSeparator`) se ignoran.
+
+- En el cuerpo, `<w:footnoteReference w:id="N"/>` se emite como `[^N]`.
+- Al final del Markdown se emiten las definiciones: `[^N]: texto`.
+- Solo se definen las notas referenciadas en el cuerpo, y en el orden de referencia.
+- El texto de las notas al pie se suma al texto plano de la integridad.
+
+## Imágenes
+
+Una imagen del cuerpo es un `<w:drawing>` (o un `<w:pict>` de VML) que contiene un
+`<a:blip r:embed="rIdN"/>` (o un `<v:imagedata r:id="rIdN"/>`).
+
+1. El `rIdN` se resuelve contra `word/_rels/document.xml.rels`.
+2. La imagen se extrae del paquete a `<nombre_del_md>_assets/`, junto al Markdown.
+3. En el Markdown se emite `![texto alternativo](<nombre>_assets/<fichero>)`.
+4. El texto alternativo sale de `wp:docPr/@descr` o, si no hay, de `wp:docPr/@name`.
+5. Si la relación no existe, apunta fuera del paquete o el fichero no está, la imagen **se omite**:
+   es preferible no emitir nada a emitir un enlace roto.
+6. Los nombres de fichero se sanean (solo letras, dígitos, `.`, `-` y `_`) y se desduplican.
+
+## Frontmatter
+
+`docProps/core.xml` se lee si existe:
+
+| Origen | Clave |
+|---|---|
+| `dc:creator` | `author` |
+| `dcterms:created` | `date` |
+| `dcterms:modified` | `updated` |
+
+- Las fechas se reducen a `AAAA-MM-DD`.
+- Los valores se entrecomillan y se escapan.
+- **Solo se emite frontmatter si hay al menos un metadato.**
+- `source` no se emite: no forma parte del contrato.
+
+```yaml
+---
+author: "Nombre Autor"
+date: "2026-01-02"
+updated: "2026-02-03"
+---
+```
 
 ## Hipervínculos
 
-`parseRelationships` (líneas 110-121) guarda **solo** las relaciones cuyo `Type` contiene
-`hyperlink`, indexadas por `Id` → `Target`.
+`parseRelationships` guarda **todas** las relaciones, indexadas por `Id`, con su tipo, su destino
+y su `TargetMode`. Los hipervínculos se resuelven para localizar las imágenes.
 
-**Limitación vigente:** ese mapa no se usa en ninguna fase posterior. Los hipervínculos del DOCX
-**se pierden** en el Markdown generado. Guardar el mapa no equivale a emitir los enlaces.
+**Limitación vigente:** los hipervínculos del cuerpo **no se emiten** en el Markdown. Ver
+[P3](../../../ARCHITECTURE.md#pendientes).
 
 ## Utilidades exported
 
-| Función | Línea | Contrato |
-|---|---|---|
-| `IsDocxFile(path string) bool` | 337-341 | `true` si la extensión (minúsculas) es `.docx`. |
-| `GetDocxFiles(dir string) ([]string, error)` | 343-357 | Lista los `.docx` del **primer nivel** de `dir`. No recursivo. Error `ERR_READ_DIR` si no se puede leer. |
+| Función | Contrato |
+|---|---|
+| `IsDocxFile(path string) bool` | `true` si la extensión (minúsculas) es `.docx`. |
+| `GetDocxFiles(dir string) ([]string, error)` | Lista los `.docx` del **primer nivel** de `dir`. No recursivo. Error `ERR_READ_DIR` si no se puede leer. |
 
 Ambas son auxiliares: la CLI usa `factory.IsSupportedFile` y no estas funciones.
 
 ## Gotchas
 
-1. `<w:b w:val="0"/>` activa igualmente la negrita: el flag se pone a `true` al abrir el elemento
-   sin mirar el atributo `val`. Documentos con negrita desactivada explícitamente producen énfasis
-   espurio.
-2. El reset de `dp.relationships` está al inicio de `Process`. Si se mueve, el estado de un
-   fichero se filtra al siguiente.
-3. El decoder se detiene en el primer error de XML (`return "", "", err` en la línea 149) → el documento
-   entero falla. No hay conversión parcial.
-4. `parseRelationships` **silencia** el error de `xml.Unmarshal` (línea 112): un `.rels` corrupto no
-   rompe la conversión, simplemente no hay hipervínculos.
-5. El texto fuera de `<w:t>` (por ejemplo en atributos) se descarta.
-6. Los estilos de título se detectan por subcadena: un estilo llamado `MiHeading3Personal` produce
+1. El decoder se detiene en el primer error de XML → el documento entero falla. No hay conversión
+   parcial.
+2. `parseRelationships` **silencia** el error de `xml.Unmarshal`: un `.rels` corrupto no rompe la
+   conversión.
+3. El texto fuera de `<w:t>` (por ejemplo en atributos) se descarta.
+4. Los estilos de título se detectan por subcadena: un estilo llamado `MiHeading3Personal` produce
    un `###`.
+5. En `numbering.xml` los valores van en el atributo `w:val` (`w:start`, `w:numFmt`, `w:lvlText`,
+   `w:lvlRestart`, `w:isLgl`, `w:startOverride`), no en el texto del elemento. Un `w:num` sin
+   `w:abstractNumId` correctamente leído deja la lista sin definición.
+6. Un párrafo numerado vacío no se escribe, pero consume su número: es lo que hace Word, y de lo
+   contrario las etiquetas siguientes se descuadran.
+7. La sangría de las listas se guarda por `numId`, no por tramo de lista.
 
 ## Relación con la verificación de integridad
 
@@ -208,10 +315,11 @@ El texto que extrae este processor es la base del cálculo de integridad. Hay **
    `dp.lastText` y lo expone con `ExtractedText()`. `Converter.CheckIntegrity` lo reutiliza y el
    DOCX no se parsea dos veces.
 2. **Sin reutilización** (el que usa `converter.CheckIntegrity` a secas): la función
-   `extractDocxContent` (`internal/converter/converter.go:120-148`) relee el ZIP y extrae el texto
+   `extractDocxContent` (`internal/converter/converter.go`) relee el ZIP y extrae el texto
    por su cuenta.
 
-Ambos dan el mismo resultado. Lo garantiza `TestIntegrity_ReusedTextMatchesFilePath`, que compara
-las dos cifras y falla si difieren.
+Ambos dan el mismo resultado: los dos incluyen el texto de las notas al pie referenciadas, una
+vez cada una. Lo garantiza `TestIntegrity_ReusedTextMatchesFilePath`, que compara las dos cifras y
+falla si difieren.
 
 Ver [../quality/integridad.md](../quality/integridad.md).
