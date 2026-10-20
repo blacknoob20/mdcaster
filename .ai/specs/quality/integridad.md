@@ -197,6 +197,7 @@ corpus institucional.
 | Notas al pie | Sí: su texto se suma al original y aparece en el Markdown |
 | Etiquetas de lista (`1.`, `a)`, `2.1.`) | No: los marcadores no son texto del documento |
 | Imágenes | No: no tienen texto |
+| Contenido descartado con `--skip-before-heading` | No: el descarte se aplica también al texto que se extrae, para que la métrica mida lo que se conserva |
 
 ## Reglas para cambios futuros
 

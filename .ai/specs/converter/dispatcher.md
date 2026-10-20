@@ -58,6 +58,7 @@ propia factory**: no hay estado compartido. Por eso `cmd/mdcaster` crea un `Conv
 | `NewConverter() *Converter` | 30-34 | Crea el dispatcher con la factory por defecto. |
 | `Convert(input, output string) error` | 37-39 | Convierte un fichero. Delegación total en `factory.Convert`. |
 | `ConvertFile(input, output string) error` | 42-44 | **Alias** de `Convert` (compatibilidad hacia atrás). |
+| `SetSkipBeforeHeading(enabled bool)` | 46-57 | Hace que la conversión empiece en el primer encabezado. |
 | `Converter.CheckIntegrity(source, markdown string) float64` | 52-62 | Reutiliza el texto que el procesador ya extrajo, si puede. |
 | `CheckIntegrity(source, markdown string) float64` | 65-73 | Verifica la integridad leyendo el original desde disco. |
 | `CheckIntegrityAgainst(originalContent, markdown string) float64` | 78-117 | Verifica la integridad con el texto original ya extraído. |
@@ -87,6 +88,24 @@ reutiliza y **no parsea el DOCX por segunda vez**. Si no, recurre a la función 
 
 Precondición: solo es válido si se llama inmediatamente después de convertir con la **misma**
 `Converter`, porque el texto pertenece al estado del procesador.
+
+## `SetSkipBeforeHeading` — `internal/converter/converter.go`
+
+```go
+func (c *Converter) SetSkipBeforeHeading(enabled bool) {
+    c.factory.SetSkipBeforeHeading(enabled)
+}
+```
+
+ Hace que la conversión de los DOCX empiece en el primer encabezado: se descartan la portada, el
+índice y las tablas de versión que lo anteceden.
+
+1. El descarte lo aplica el processor, no el dispatcher: el texto que se extrae para la
+   verificación de integridad se recorta también, de modo que la mide sobre el contenido que se
+   conserva.
+2. Si el documento no tiene ningún encabezado, se conserva todo.
+3. Los formatos que no lo soportan (el PDF) lo ignoran: la propagación va por la interfaz
+   opcional `SkipBeforeHeadingSetter`.
 
 ## `GetOutputPath` — `internal/converter/converter.go:346-350`
 

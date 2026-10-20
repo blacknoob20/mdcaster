@@ -15,6 +15,7 @@
 | 2 — D10 | completada | Integridad por tokens: la métrica pasa de 100 % en todos los documentos a 99,32 % de media, y el coste de la verificación baja de O(palabras × longitud) a lineal |
 | 3 — Documentación | completada | README solo para uso, ARCHITECTURE con D1–D11 y P1–P6, 8 specs actualizados, AGENTS.md reducido a 41 líneas |
 | 4 — Fidelidad DOCX | en curso | Tablas, numeración real, frontmatter, notas al pie e imágenes (D12, D13) |
+| 5 — Cierre de huecos | completada | Subrayado como HTML en línea (D14) y descarte previo (D15) |
 
 Verificación final de la fase 0-3: `gofmt` limpio, `go vet` limpio, `go test ./...` en verde,
 compila para linux, darwin y windows (amd64), 52 enlaces markdown y 111 referencias de código
@@ -46,6 +47,8 @@ contenido, misma estructura y la numeración real que muestra Word.
 | D11 | Cero dependencias externas. El color sale con códigos ANSI de la stdlib | Aceptada |
 | D12 | El documento se parsea como un modelo de bloques y el render es una fase aparte | Aceptada |
 | D13 | La numeración de listas se resuelve contra `word/numbering.xml`, como en Word | Aceptada |
+| D14 | El subrayado se emite como `<u>texto</u>`, HTML en línea | Aceptada |
+| D15 | El descarte antes del primer encabezado es una opción del processor, no de la CLI | Aceptada |
 
 ### Pendientes
 
@@ -57,7 +60,7 @@ contenido, misma estructura y la numeración real que muestra Word.
 | P4 | Un PDF aparece como 0 % (🔴). Mostrar "no medido" en lugar de 0 |
 | P6 | La normalización borra acentos y `ñ` en vez de transliterarlos |
 | P7 | Las etiquetas de lista dentro de una celda de tabla se pierden |
-| P8 | El subrayado (`w:u`) no se conserva |
+| P8 | El subrayado (`w:u`) no se conserva | Resuelto por D14 |
 
 ## Fases
 
@@ -115,6 +118,18 @@ Medido sobre los 4 DOCX del corpus institucional:
 | Etiquetas de lista correctas | 0 | 49 / 49 y 72 de 72 | 12 de 49 y 27 de 72 |
 | Asignaciones por conversión | 12.307 | 19.366 | — |
 | Tiempo por conversión | ~3,4 ms | ~4,8 ms | ~225 ms |
+
+### Fase 5 — Cierre de los huecos frente a docx2md (D14, D15)
+
+Los dos puntos que quedaban por debajo de `docx2md-cli`:
+
+1. **Subrayado**: `<w:u>` se emite como `<u>texto</u>`, por fuera del énfasis de Markdown. Hay
+   273 elementos `<w:u>` en el corpus y 28 `<u>` en el Markdown generado.
+2. **Descarte previo**: `--skip-before-heading` empieza la conversión en el primer encabezado.
+   1.140 líneas de portada, índice y tablas de versión descartadas; la integridad no baja (99,16 %
+   con y sin descarte) porque el descarte se aplica también al texto que se mide.
+
+Ambos con sus specs, sus tests y el modelo de fragmentos del parser (D12) como base.
 
 ## Verificación
 

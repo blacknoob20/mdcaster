@@ -20,6 +20,7 @@ mostrar progreso por fichero y un resumen final con métricas de rendimiento e i
 | `--input` | `-i` | string | `""` | Ruta al archivo o carpeta de entrada |
 | `--output` | `-o` | string | `"converted"` | Carpeta de destino |
 | `--workers` | `-w` | int | `0` | Número de workers (`0` = auto) |
+| `--skip-before-heading` | — | bool | `false` | Empezar la conversión en el primer encabezado |
 | `--version` | — | bool | `false` | Mostrar versión |
 | `--help` | — | bool | `false` | Mostrar ayuda |
 
@@ -62,9 +63,23 @@ posicional → `ERR_MDC_INPUT_MISSING`, se imprime el usage y se sale con **cód
 10. Resolver ruta de salida (absoluta) + subdirectorio timestamp
 11. os.MkdirAll(salida, 0755)  → error → exit 1
 12. Mostrar: carpeta de salida, nº de ficheros, nº de workers
-13. processFilesWithConcurrency()
+13. processFilesWithConcurrency(..., skipBeforeHeading)
 14. printResults()
 ```
+
+### `--skip-before-heading`
+
+Con el flag activo, la conversión de los DOCX **empieza en el primer encabezado**: se descartan
+la portada, el índice y las tablas de versión que lo anteceden.
+
+1. El descarte lo aplica el processor (`DocxProcessor`), no la CLI: el texto que se extrae para la
+   verificación de integridad se recorta también, de modo que la mide **sobre el contenido que se
+   conserva** y no baja por un descarte intencionado.
+2. Si el documento **no tiene ningún encabezado**, se conserva todo: descartar un documento
+   entero sería perder la información.
+3. El PDF ignora la opción: no tiene encabezados.
+4. La opción se propaga por la interfaz opcional `SkipBeforeHeadingSetter`
+   (`internal/converter/processor.go`), así que los formatos que no la soportan no se ven afectados.
 
 ### Banner
 
@@ -103,7 +118,8 @@ Reglas:
 1. numWorkers <= 0 → runtime.NumCPU()
 2. Canal jobs con buffer = len(files)     ← todos los trabajos encolados de golpe
 3. numWorkers goroutines:
-   ├─ cada worker crea SU PROPIO converter.NewConverter()   (línea 196)
+   ├─ cada worker crea SU PROPIO converter.NewConverter()
+   ├─ conv.SetSkipBeforeHeading(skipBeforeHeading)   ← la opción, por worker
    ├─ por cada job:
    │    ├─ outputPath = converter.GetOutputPath(inputFile, outputDir)
    │    ├─ err = conv.ConvertFile(inputFile, outputPath)
@@ -232,3 +248,7 @@ USO:
 7. `GetOutputPath` solo usa el **nombre base**: dos ficheros homónimos en directorios distintos
    colisionarían en la salida (no es posible hoy por el escaneo no recursivo, pero sí lo sería si se
    activara la recursividad).
+8. `--skip-before-heading` **no** vacía un documento sin encabezados: si no hay ninguno, se
+   conserva todo.
+9. `--skip-before-heading` no cambia la integridad: el descarte se aplica también al texto que se
+   extrae para la medición.

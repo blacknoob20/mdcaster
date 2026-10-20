@@ -92,7 +92,7 @@ el cierre de cada elemento.
 | `numId` | Identificador de la lista |
 | `r` | Inicia un run |
 | `rPr` | Propiedades del run (solo cuentan dentro de `r`) |
-| `b`, `i`, `strike` | Activan negrita, cursiva y tachado |
+| `b`, `i`, `strike`, `u` | Activan negrita, cursiva, tachado y subrayado |
 | `t` | Apila un buffer de texto |
 | `tab` | Escribe **2 espacios** |
 | `br` | Escribe `\n` |
@@ -136,6 +136,12 @@ El énfasis se aplica sobre el texto sin los espacios que lo rodean: `**texto **
 | Negrita | `**texto**` |
 | Cursiva | `*texto*` |
 | Tachado | `~~texto~~` |
+| Subrayado | `<u>texto</u>` (HTML en línea: Markdown no lo tiene) |
+
+El subrayado se emite **por fuera** del énfasis, para que las marcas de Markdown de dentro sigan
+interpretándose: un texto en negrita y subrayado sale `<u>**texto**</u>`.
+
+Un subrayado con `w:val="none"` (o `"0"`, `"false"`, `"off"`) no se emite.
 
 Las propiedades de la **marca de párrafo** (`w:pPr/w:rPr`) no se aplican al texto: describen el
 párrafo, no sus runs. Una negrita desactivada (`<w:b w:val="0"/>`) no activa la negrita.
@@ -274,6 +280,20 @@ updated: "2026-02-03"
 ---
 ```
 
+## Descartar el contenido anterior al primer encabezado
+
+`DocxProcessor` puede descartar la portada, el índice y las tablas de versión que anteceden al
+primer encabezado. La opción la activa la CLI con `--skip-before-heading` y llega al processor por
+la interfaz opcional `SkipBeforeHeadingSetter`.
+
+1. El descarte se hace **por bloques**: se busca el primer párrafo con estilo de título y se
+   descartan los bloques anteriores.
+2. El texto plano se recorta en el mismo punto, de modo que la verificación de integridad mide el
+   contenido que se conserva y no baja por un descarte intencionado.
+3. Si el documento **no tiene ningún encabezado**, se conserva todo: vaciar el documento sería
+   perder la información.
+4. El frontmatter no se ve afectado: son metadatos, no contenido del cuerpo.
+
 ## Hipervínculos
 
 `parseRelationships` guarda **todas** las relaciones, indexadas por `Id`, con su tipo, su destino
@@ -306,6 +326,8 @@ Ambas son auxiliares: la CLI usa `factory.IsSupportedFile` y no estas funciones.
 6. Un párrafo numerado vacío no se escribe, pero consume su número: es lo que hace Word, y de lo
    contrario las etiquetas siguientes se descuadran.
 7. La sangría de las listas se guarda por `numId`, no por tramo de lista.
+8. En `numbering.xml` los valores van en el atributo `w:val`, y el texto plano del documento se
+   recorta con el mismo punto de corte que los bloques.
 
 ## Relación con la verificación de integridad
 

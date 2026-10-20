@@ -99,6 +99,8 @@ Entrada (.md)
 | Umbral 🔴 | `< 50` | `cmd/mdcaster/main.go:256` |
 | Línea de texto DOCX | 2 espacios por `w:tab`, `\n` por `w:br` | `internal/converter/docx_parser.go` |
 | Negrita / cursiva / tachado | `**x**`, `*x*`, `~~x~~` | `internal/converter/docx_parser.go` |
+| Subrayado | `<u>x</u>` (HTML en línea) | `internal/converter/docx_parser.go` |
+| Descarte previo | `--skip-before-heading` empieza en el primer encabezado | `internal/converter/docx_parser.go` |
 | Heading por estilo | `Heading1..6` / `Título1..6` → `#`..`######` | `internal/converter/docx_render.go` |
 | Título / Subtítulo | `#` / `##` | `internal/converter/docx_render.go` |
 | Listas | numeración real de `word/numbering.xml`; viñeta `- `, decimal `N. ` | `internal/converter/docx_numbering.go` |

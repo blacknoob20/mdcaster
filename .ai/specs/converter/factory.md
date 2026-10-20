@@ -67,6 +67,27 @@ verificar la integridad sin parsear el DOCX por segunda vez. Ver
 Regla: un procesador que implemente `TextExtractor` debe devolver el texto del **último**
 documento procesado, y debe invalidarlo al empezar a procesar otro.
 
+### Interfaz opcional: `SkipBeforeHeadingSetter`
+
+```go
+// internal/converter/processor.go
+type SkipBeforeHeadingSetter interface {
+    // SetSkipBeforeHeading activa o desactiva el descarte del contenido
+    // anterior al primer encabezado.
+    SetSkipBeforeHeading(enabled bool)
+}
+```
+
+No forma parte de `FileProcessor`. Es **opcional**: un procesador que no la implemente sigue siendo
+válido, y simplemente ignora la opción.
+
+La implementa `DocxProcessor`. La CLI la activa con `--skip-before-heading`, que descarta la
+portada, el índice y las tablas de versión de los DOCX. El PDF no la implementa: no tiene
+encabezados.
+
+La factory la propaga con `SetSkipBeforeHeading`, que recorre los procesadores registrados y se
+laplica solo a los que la implementan.
+
 ## `ProcessorFactory`
 
 ```go
