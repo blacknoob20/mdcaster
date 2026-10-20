@@ -26,16 +26,19 @@ una entrada nueva y la anterior **no se reescribe**: el historial forma parte de
 | [D9](#d9--el-rendimiento-es-un-requisito-de-primera-clase) | El rendimiento es un requisito de primera clase | Aceptada |
 | [D10](#d10--la-integridad-se-mide-por-tokens) | La integridad se mide por tokens | Aceptada, reemplaza a D5 |
 | [D11](#d11--cero-dependencias-externas) | Cero dependencias externas | Aceptada |
+| [D12](#d12--el-documento-se-parsea-como-un-modelo-de-bloques) | El documento se parsea como un modelo de bloques | Aceptada |
+| [D13](#d13--la-numeración-de-listas-se-resuelve-contra-numberingxml) | La numeración de listas se resuelve contra `numbering.xml` | Aceptada |
 | [P1](#pendientes) | `ConvertDirectory` puede hacer `panic` | Pendiente |
 | [P2](#pendientes) | Escaneo no recursivo frente a la API recursiva | Pendiente |
 | [P3](#pendientes) | Hipervínculos DOCX parseados y no emitidos | Pendiente |
 | [P4](#pendientes) | El PDF se muestra como 0 % en vez de "no medido" | Pendiente |
 | [P6](#pendientes) | La normalización borra acentos y `ñ` | Pendiente |
+| [P7](#pendientes) | Las etiquetas de lista dentro de una celda se pierden | Pendiente |
+| [P8](#pendientes) | El subrayado no se conserva | Pendiente |
 
 ---
 
 ## Decisiones
-
 ### D1 — Factory Pattern para los formatos de entrada
 
 **Estado:** aceptada
@@ -87,6 +90,9 @@ recorrer `word/document.xml`. Ninguna dependencia externa.
 - A cambio, el parseo de OOXML está escrito a mano. Lo que no está contemplado se ignora: tablas
   (su texto sí se conserva, como párrafos), hipervínculos (ver P3), imágenes, notas al pie,
   encabezados y pies de página.
+  **Actualizado por [D12](#d12--el-documento-se-parsea-como-un-modelo-de-bloques) y
+  [D13](#d13--la-numeración-de-listas-se-resuelve-contra-numberingxml):** las tablas, las
+  imágenes, las notas al pie y la numeración de listas ya se convierten.
 - El decoder por tokens, y no `Unmarshal`, es lo que permite distinguir el cierre de cada
   elemento y aplicar el formato en el punto correcto.
 
@@ -245,6 +251,61 @@ la consola.
   para Windows, pero no se ha podido **ejecutar** en un entorno Windows desde este repositorio.
 - En consolas de Windows antiguas sin soporte de VT se verían las secuencias de escape.
 
+### D12 — El documento se parsea como un modelo de bloques
+
+**Estado:** aceptada
+
+**Contexto.** El parser DOCX era un autómata de estado sobre el flujo de tokens: escribía el
+Markdown a medida que leía el XML. Con las tablas, las listas y las notas al pie eso ya no
+servía: una tabla no es una secuencia de párrafos, y un párrafo dentro de una celda no es un
+párrafo del cuerpo. La comparación con `docx2md` (que usa el modelo real de `python-docx` + `lxml`)
+mostraba que la diferencia de fidelidad venía de ahí, no del algoritmo de conversion.
+
+**Decisión.** El parseo produce un **modelo de bloques** (`docxDocument` → `docxBlock` →
+`docxParagraph` / `docxTable`) y el render es una fase separada. Los fragmentos de texto se
+guardan con su formato (`inlineSpan`) en vez de premarcados, de modo que el mismo párrafo se
+puede renderizar como Markdown o como HTML en línea.
+
+**Consecuencias.**
+
+- El texto plano para la integridad se sigue acumulando en el mismo recorrido: no hay un segundo
+  parseo.
+- El orden del documento se conserva: párrafos y tablas se entrelazan como en el original.
+- Se puede emitir el mismo contenido en Markdown o en HTML según lo que admita el destino (las
+  listas con etiqueta no decimal, por ejemplo).
+- **Coste medido** (corpus local, DOCX de 295 KB): las asignaciones suben de 12.307 a 19.366 por
+  conversión (+57 %) y la memoria de 1,02 MB a 1,42 MB. El tiempo de conversión pasa de ~3,4 ms a
+  ~4,8 ms. Sigue siendo unas 40 veces más rápido que `docx2md-cli` (225 ms por fichero).
+- El emphasis se aplica sobre el texto sin sus espacios, y los runs contiguos con el mismo
+  formato se fusionan: `**a****b**` (Markdown roto) ya no se produce.
+
+### D13 — La numeración de listas se resuelve contra `numbering.xml`
+
+**Estado:** aceptada
+
+**Contexto.** `mdcaster` emitía todas las listas como viñetas, y `docx2md-cli` leía
+`numbering.xml` solo para distinguir ordenada de viñeta: inventaba su propio contador arábigo y
+perdía las etiquetas (`a)`, `I.`, `2.1.`). En el corpus institucional eso eran 37 de 49 etiquetas
+mal en cuatro documentos.
+
+**Decisión.** La numeración se resuelve como la resuelve Word: `w:num` → `w:abstractNum` →
+`w:lvl`, con los contadores por `(numId, ilvl)`, el `w:startOverride`, el `w:lvlRestart` y la
+composición de la `w:lvlText` (`%1.%2.`). Los contadores no se reinician al cambiar de `numId`.
+
+**Consecuencias.**
+
+- Las etiquetas del Markdown son las que Word muestra. Medido sobre el mismo corpus: 49 de 49
+  etiquetas correctas en un documento y 72 de 72 en otro, frente a 12 de 49 y 27 de 72 de
+  `docx2md-cli`.
+- Markdown solo admite marcadores de lista ordenada con dígitos. Las etiquetas alfabéticas y
+  romanas se emiten como `<ol type="a" start="N">`, y las compuestas (`2.1.`) como línea literal,
+  que es la única forma de que la etiqueta llegue intacta. Es la misma degradación que aplica
+  `pandoc`, pero conservando la etiqueta.
+- En un bloque `<ol>` el Markdown no se procesa: el contenido del `<li>` se emite con HTML en
+  línea (`<strong>`, `<em>`, `<del>`).
+- Un párrafo numerado vacío no se escribe, pero **consume su número**: es lo que hace Word, y de
+  lo contrario las etiquetas siguientes se descuadran.
+
 ---
 
 ## Pendientes
@@ -272,8 +333,8 @@ funciona.
 
 ### P3 — Hipervínculos DOCX parseados y no emitidos
 
-`DocxProcessor` lee `word/_rels/document.xml.rels` y guarda los hipervínculos, pero el mapa no se
-usa en ninguna fase posterior: los enlaces se pierden.
+`DocxProcessor` lee `word/_rels/document.xml.rels` y guarda **todas** las relaciones, pero solo
+las usa para localizar las imágenes: los enlaces del cuerpo se pierden.
 
 **Opciones:** emitirlos como enlaces Markdown, o quitar el parseo y aceptar que se pierden.
 
@@ -291,6 +352,23 @@ transliterarlos: "técnica" queda como "tcnica". Como el mismo criterio se aplic
 Markdown, la comparación sigue siendo coherente, pero la medida se calcula sobre tokens degradados.
 
 **Opciones:** transliterar antes de filtrar, o aceptar el límite actual.
+
+### P7 — Las etiquetas de lista dentro de una celda se pierden
+
+El texto de una celda se emite tal cual: los párrafos numerados que hay dentro de una tabla no
+llevan marcador, porque una celda de Markdown no admite una lista. Es la misma limitación que
+tiene `docx2md-cli` y que el fork `docx2md_fiel` documenta.
+
+Medido: 8 etiquetas perdidas en 4 documentos del corpus institucional.
+
+**Opciones:** aceptar el límite, o emitir la etiqueta como texto plano dentro de la celda
+(`a) texto`), que no es una lista pero conserva la etiqueta.
+
+### P8 — El subrayado no se conserva
+
+`<w:u>` se ignora: Markdown no tiene subrayado. `docx2md-cli` lo emite como `<u>texto</u>`.
+
+**Opciones:** emitirlo como HTML en línea, como se hace dentro de los `<ol>`, o aceptar el límite.
 
 ---
 

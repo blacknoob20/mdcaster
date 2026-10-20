@@ -4,7 +4,7 @@
 > Este fichero registra el alcance, las decisiones tomadas y el orden de ejecución.
 
 **Fecha:** 2026-10-20
-**Estado:** completado
+**Estado:** en curso
 
 ## Resultado
 
@@ -14,15 +14,20 @@
 | 1 — Sin cambio de salida | completada | `mdclean` genérico 207× más rápido, `isStructuralLine` 681× y con 0 alocaciones, DOCX con 23 % menos alocaciones, `fatih/color` sustituido por ANSI, `go.mod` sin dependencias, LICENSE y `.gitignore` actualizados |
 | 2 — D10 | completada | Integridad por tokens: la métrica pasa de 100 % en todos los documentos a 99,32 % de media, y el coste de la verificación baja de O(palabras × longitud) a lineal |
 | 3 — Documentación | completada | README solo para uso, ARCHITECTURE con D1–D11 y P1–P6, 8 specs actualizados, AGENTS.md reducido a 41 líneas |
+| 4 — Fidelidad DOCX | en curso | Tablas, numeración real, frontmatter, notas al pie e imágenes (D12, D13) |
 
-Verificación final: `gofmt` limpio, `go vet` limpio, `go test ./...` en verde, compila para
-linux, darwin y windows (amd64), 52 enlaces markdown y 111 referencias de código comprobadas.
+Verificación final de la fase 0-3: `gofmt` limpio, `go vet` limpio, `go test ./...` en verde,
+compila para linux, darwin y windows (amd64), 52 enlaces markdown y 111 referencias de código
+comprobadas.
 
 ## Objetivo
 
 Dejar mdcaster coherente, rápido y documentado bajo la metodología SPEC-First:
 specs como fuente de verdad, README para uso, ARCHITECTURE para decisiones, cero
 dependencias externas y conversión lo más rápida posible.
+
+Desde la fase 4, el objetivo es **cerrar la brecha de fidelidad con `docx2md-cli`**: mismo
+contenido, misma estructura y la numeración real que muestra Word.
 
 ## Decisiones tomadas
 
@@ -39,6 +44,8 @@ dependencias externas y conversión lo más rápida posible.
 | D9 | El rendimiento es un requisito de primera clase: medir antes y después de cada cambio | Aceptada |
 | D10 | La integridad se mide por tokens exactos, no por subcadena | Aceptada, reemplaza a D5 |
 | D11 | Cero dependencias externas. El color sale con códigos ANSI de la stdlib | Aceptada |
+| D12 | El documento se parsea como un modelo de bloques y el render es una fase aparte | Aceptada |
+| D13 | La numeración de listas se resuelve contra `word/numbering.xml`, como en Word | Aceptada |
 
 ### Pendientes
 
@@ -49,6 +56,8 @@ dependencias externas y conversión lo más rápida posible.
 | P3 | Los hipervínculos DOCX se parsean y no se emiten. Emitirlos o quitar el parseo |
 | P4 | Un PDF aparece como 0 % (🔴). Mostrar "no medido" en lugar de 0 |
 | P6 | La normalización borra acentos y `ñ` en vez de transliterarlos |
+| P7 | Las etiquetas de lista dentro de una celda de tabla se pierden |
+| P8 | El subrayado (`w:u`) no se conserva |
 
 ## Fases
 
@@ -81,6 +90,31 @@ y después sobre el corpus.
 - Specs: `factory.md`, `dispatcher.md`, `pdf.md`, `overview.md`, `integridad.md`,
   `cli/mdcaster.md`.
 - `AGENTS.md`: versión corta, más regla de rendimiento y regla del corpus.
+
+### Fase 4 — Fidelidad DOCX (D12, D13)
+
+Cerrar la brecha con `docx2md-cli` sobre los mismos documentos, por orden de valor para el
+corpus institucional:
+
+1. **Tablas**: `<w:tbl>`, `<w:tr>`, `<w:tc>`, `<w:gridSpan>` y `<w:vMerge>` → tabla Markdown,
+   con la primera fila como cabecera.
+2. **Listas numeradas**: `word/numbering.xml` con los contadores de Word (D13).
+3. **Frontmatter**: `docProps/core.xml` → `author`, `date`, `updated`.
+4. **Notas al pie**: `word/footnotes.xml` → `[^id]` y sus definiciones.
+5. **Imágenes**: `<w:drawing>` → `<a:blip r:embed>` → extraer y enlazar.
+
+Decisiones acordadas: primera fila como cabecera por defecto; celdas combinadas como celdas
+vacías conservando el texto una vez; etiquetas no decimales como `<ol type="a">`; frontmatter
+solo con metadatos y notas con sintaxis `[^id]`; imágenes en `<nombre>_assets/` junto al `.md`.
+
+Medido sobre los 4 DOCX del corpus institucional:
+
+| Métrica | Antes | Después | `docx2md-cli` |
+|---|---|---|---|
+| Filas de tabla conservadas | 0 | 26 / 127 / 32 | 26 / 124 / 32 |
+| Etiquetas de lista correctas | 0 | 49 / 49 y 72 de 72 | 12 de 49 y 27 de 72 |
+| Asignaciones por conversión | 12.307 | 19.366 | — |
+| Tiempo por conversión | ~3,4 ms | ~4,8 ms | ~225 ms |
 
 ## Verificación
 

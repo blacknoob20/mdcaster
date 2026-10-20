@@ -13,8 +13,8 @@
 ## 📝 Características
 
 - **Soporte múltiple**: Convierte archivos de múltiples formatos a Markdown (DOCX, PDF, etc.)
-- **Extrae TODO el contenido**: Párrafos, encabezados, listas, y contenido de tablas como texto formateado
-- **Formato Markdown limpio**: Sin tablas Markdown complejas, solo texto fácil de leer
+- **Extrae TODO el contenido**: Párrafos, encabezados, listas, tablas, notas al pie e imágenes
+- **Markdown estructurado**: Tablas como tablas Markdown y listas con su numeración real
 - **Preserva estilos**: Negrita, cursiva, tachado, encabezados y listas se mantienen
 - **Concurrencia inteligente**: Goroutines para procesamiento paralelo ultra-rápido
 - **Flexible**: Convierte un archivo o una carpeta completa
@@ -96,6 +96,9 @@ go install ./cmd/mdclean
 
 > La carpeta de salida siempre recibe un subdirectorio con timestamp (`YYYYMMDD-HHMMSS`) para
 > agrupar cada ejecución. Ejemplo: `./documentos/converted/20261020-091500/`.
+
+> Si un documento tiene imágenes en el cuerpo, se extraen a una carpeta `<nombre>_assets/` junto
+> al `.md` que las referencia.
 
 > El escaneo de una carpeta es **no recursivo**: solo se procesa su primer nivel.
 
@@ -188,9 +191,12 @@ La conversión de DOCX preserva los siguientes elementos:
 - ✅ **Texto en negrita**
 - ✅ **Texto en cursiva**
 - ✅ **Texto tachado**
-- ✅ **Listas con viñetas**
+- ✅ **Listas con viñetas y numeradas** (con la numeración real del documento)
+- ✅ **Tablas** (como tablas Markdown)
+- ✅ **Notas al pie**
+- ✅ **Imágenes** (extraídas junto al `.md`)
+- ✅ **Metadatos del documento** (autor y fechas, en el frontmatter)
 - ✅ **Saltos de línea**
-- ✅ **Contenido de tablas extraído como párrafos** (para mejor legibilidad)
 
 La conversión de PDF produce **texto plano** con el layout original preservado (`pdftotext -layout`),
 sin estructura Markdown. Usa `mdclean` para normalizarlo.
