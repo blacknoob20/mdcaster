@@ -10,26 +10,33 @@
 
 ---
 
-## 📝 Características del Convertidor
+## 📝 Características
 
 - **Soporte múltiple**: Convierte archivos de múltiples formatos a Markdown (DOCX, PDF, etc.)
 - **Extrae TODO el contenido**: Párrafos, encabezados, listas, y contenido de tablas como texto formateado
 - **Formato Markdown limpio**: Sin tablas Markdown complejas, solo texto fácil de leer
-- **Preserva estilos**: Negrita, cursiva, encabezados y listas se mantienen
+- **Preserva estilos**: Negrita, cursiva, tachado, encabezados y listas se mantienen
 - **Concurrencia inteligente**: Goroutines para procesamiento paralelo ultra-rápido
 - **Flexible**: Convierte un archivo o una carpeta completa
 - **Salida personalizable**: Define tu propia carpeta de destino
 - **Verificación de integridad**: Muestra el porcentaje de contenido que se conservó en la conversión
 - **Indicador visual**: 🟢 Verde, 🟡 Amarillo, 🟠 Naranja, 🔴 Rojo según integridad
-- **Multiplataforma**: Funciona en Linux, macOS y Windows
-
-## ⚡ Características
+- **Limpieza posterior**: `mdclean` normaliza el Markdown generado (modo genérico y modo TDR)
+- **Sin dependencias externas**: Solo la biblioteca estándar de Go
 
 ## 📦 Instalación
 
 ### Requisitos
 
 - Go 1.21 o superior
+- `pdftotext` (poppler-utils) — **solo si vas a convertir PDF**
+
+```bash
+# Ubuntu/Debian
+sudo apt install poppler-utils
+# macOS
+brew install poppler
+```
 
 ### Compilar desde código fuente
 
@@ -37,14 +44,15 @@
 # Clonar o navegar al directorio del proyecto
 cd mdcaster
 
-# Descargar dependencias
-go mod tidy
-
-# Compilar
+# Compilar el conversor
 go build -o mdcaster ./cmd/mdcaster
+
+# Compilar el cleaner
+go build -o mdclean ./cmd/mdclean
 
 # O instalar globalmente
 go install ./cmd/mdcaster
+go install ./cmd/mdclean
 ```
 
 ## 🚀 Uso
@@ -86,6 +94,11 @@ go install ./cmd/mdcaster
 | `--version` | - | Mostrar versión | - |
 | `--help` | - | Mostrar ayuda | - |
 
+> La carpeta de salida siempre recibe un subdirectorio con timestamp (`YYYYMMDD-HHMMSS`) para
+> agrupar cada ejecución. Ejemplo: `./documentos/converted/20261020-091500/`.
+
+> El escaneo de una carpeta es **no recursivo**: solo se procesa su primer nivel.
+
 ## 📊 Ejemplo de Salida
 
 ```
@@ -96,18 +109,17 @@ go install ./cmd/mdcaster
 ╚═══════════════════════════════════════════════════════════════╝
 
 📁 Escaneando carpeta: ./documentos
-📂 Carpeta de salida: ./documentos/converted
+📂 Carpeta de salida: ./documentos/converted/20261020-091500
 📄 Archivos a procesar: 10
 ⚡ Workers paralelos: 8
 
 ✅ [1/10] 🟢 Convertido: documento1.docx     100.0%
-✅ [2/10] 🟢 Convertido: documento2.docx     100.0%
-✅ [3/10] 🟡 Convertido: documento3.docx      87.5%
+✅ [2/10] 🟡 Convertido: documento3.docx      87.5%
 ...
 
-═══════════════════════════════════════════════════════════════
+════════════════════════════════════════════════════════════════
                       📊 RESUMEN DE CONVERSIÓN
-═══════════════════════════════════════════════════════════════
+════════════════════════════════════════════════════════════════
 
   ✅ Archivos convertidos exitosamente: 10
 
@@ -121,28 +133,56 @@ go install ./cmd/mdcaster
   🚀 Velocidad: 22.22 archivos/segundo
 
   ⚡ Speedup por concurrencia: 1.98x más rápido
-═══════════════════════════════════════════════════════════════
+════════════════════════════════════════════════════════════════
 ```
 
 ### Indicador de Integridad
 
-El convertidor ahora muestra un indicador visual de la integridad del contenido:
+El convertidor muestra un indicador visual de la integridad del contenido:
 
 | Símbolo | Rango | Significado |
-|---------|-------|------------|
+|---------|-------|-------------|
 | 🟢 Verde | ≥95% | Integridad óptima - Todo el contenido se conservó |
 | 🟡 Amarillo | 80-94% | Integridad buena - Casi todo el contenido se conservó |
 | 🟠 Naranja | 50-79% | Integridad aceptable - Parte del contenido se conservó |
 | 🔴 Rojo | <50% | Integridad deficiente - Se perdió mucho contenido |
 
-Cada archivo muestra su porcentaje de integridad durante la conversión, y al final se muestra un resumen con:
-- **Promedio**: Integridad promedio de todos los archivos convertidos
-- **Mínima**: El archivo con menor integridad
-- **Máxima**: El archivo con mayor integridad
+La integridad mide qué porcentaje de las palabras del texto original aparece en el Markdown
+generado. Cada archivo muestra su porcentaje durante la conversión, y al final un resumen con el
+**Promedio**, la **Mínima** y la **Máxima**.
+
+> **Nota**: la verificación de integridad solo es válida para **DOCX**. En archivos PDF el porcentaje
+> se muestra como 0 % (🔴) porque el verificador solo sabe leer el original en formato DOCX. En un
+> PDF el 🔴 no indica un fallo de conversión.
+
+## 🧹 Limpieza de Markdown (`mdclean`)
+
+`mdclean` post-procesa un `.md` ya convertido para que quede legible y navegable.
+
+```bash
+# Limpiar y mostrar por stdout
+./mdclean documento.md
+
+# Limpiar y reescribir el archivo en el sitio
+./mdclean --inplace documento.md
+
+# Modo TDR: limpieza específica para exportaciones DOCX/PDF institucionales
+./mdclean --tdr documento.md
+./mdclean --tdr --inplace documento.md
+```
+
+| Flag | Descripción |
+|------|-------------|
+| `--inplace` | Reescribe el archivo de entrada en el sitio (en vez de imprimir por stdout) |
+| `--tdr` | Modo TDR: normaliza encabezados, índices, viñetas, cabeceras repetidas y números de página |
+
+`mdclean` exige **exactamente un** argumento: la ruta del `.md` a limpiar.
+
+> `--inplace` no es atómico: trunca y reescribe el fichero. Prueba siempre sobre una copia.
 
 ## 🔧 Formato Soportado
 
-La conversión preserva los siguientes elementos:
+La conversión de DOCX preserva los siguientes elementos:
 
 - ✅ **Encabezados** (H1-H6)
 - ✅ **Texto en negrita**
@@ -152,37 +192,21 @@ La conversión preserva los siguientes elementos:
 - ✅ **Saltos de línea**
 - ✅ **Contenido de tablas extraído como párrafos** (para mejor legibilidad)
 
-## 📁 Estructura del Proyecto
-
-```
-mdcaster/
-├── cmd/
-│   └── mdcaster/
-│       └── main.go          # Punto de entrada
-├── internal/
-│   └── converter/
-│       └── converter.go     # Lógica de conversión
-├── word/                    # Archivos de entrada
-├── converted/               # Archivos MD convertidos
-├── go.mod                   # Módulo Go
-├── go.sum                   # Checksums de dependencias
-└── README.md                # Este archivo
-```
-
-## 🏎️ Rendimiento
-
-El convertidor utiliza las goroutines de Go para procesar múltiples archivos en paralelo:
-
-- **Sin concurrencia**: 1 archivo a la vez
-- **Con concurrencia**: N archivos simultáneos (donde N = número de CPUs)
-
-Esto resulta en mejoras de velocidad de hasta **Nx** en sistemas multi-core.
+La conversión de PDF produce **texto plano** con el layout original preservado (`pdftotext -layout`),
+sin estructura Markdown. Usa `mdclean` para normalizarlo.
 
 ## 📝 Licencia
 
-MIT License - Siéntete libre de usar y modificar.
+MIT. Ver [LICENSE](LICENSE).
 
 ## 🤝 Contribuir
+
+Antes de tocar el código, lee las especificaciones: son la fuente de verdad del comportamiento
+deseado.
+
+- [`.ai/specs/overview.md`](.ai/specs/overview.md) — Visión general, reglas de negocio, taxonomía de errores
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) — Decisiones de arquitectura y pendientes
+- [`AGENTS.md`](AGENTS.md) — Protocolo de trabajo para agentes
 
 ¡Las contribuciones son bienvenidas! Por favor, abre un issue o pull request.
 
