@@ -11,25 +11,43 @@ import (
 	"strings"
 )
 
+// Partes del paquete OOXML que se leen.
+const (
+	partDocument  = "word/document.xml"
+	partRels      = "word/_rels/document.xml.rels"
+	partNumbering = "word/numbering.xml"
+	partFootnotes = "word/footnotes.xml"
+	partCoreProps = "docProps/core.xml"
+)
+
 // DocxProcessor procesa archivos DOCX
 type DocxProcessor struct {
-	relationships map[string]string
+	// relationships son las relaciones del documento, indexadas por Id.
+	relationships map[string]docxRelationship
 	// Texto plano del último documento procesado. Permite verificar la
 	// integridad del contenido sin volver a parsear el DOCX.
 	lastText string
 }
 
+// docxRelationship es una relación del documento (document.xml.rels).
+type docxRelationship struct {
+	ID         string
+	Type       string
+	Target     string
+	TargetMode string
+}
+
 // NewDocxProcessor crea una nueva instancia del procesador DOCX
 func NewDocxProcessor() *DocxProcessor {
 	return &DocxProcessor{
-		relationships: make(map[string]string),
+		relationships: make(map[string]docxRelationship),
 	}
 }
 
 // Process convierte un DOCX a Markdown
 func (dp *DocxProcessor) Process(inputPath, outputPath string) error {
 	// Reiniciar el estado para cada archivo
-	dp.relationships = make(map[string]string)
+	dp.relationships = make(map[string]docxRelationship)
 	dp.lastText = ""
 
 	// Abrir el archivo DOCX (que es un ZIP)
@@ -39,43 +57,81 @@ func (dp *DocxProcessor) Process(inputPath, outputPath string) error {
 	}
 	defer reader.Close()
 
-	var documentContent []byte
-	var relsContent []byte
-
-	// Buscar el documento principal y las relaciones
+	parts := make(map[string][]byte, 5)
 	for _, file := range reader.File {
 		switch file.Name {
-		case "word/document.xml":
-			documentContent, err = dp.readZipFile(file)
+		case partDocument, partRels, partNumbering, partFootnotes, partCoreProps:
+			data, err := dp.readZipFile(file)
 			if err != nil {
-				return fmt.Errorf("error leyendo document.xml: %w", err)
+				return fmt.Errorf("error leyendo %s: %w", file.Name, err)
 			}
-		case "word/_rels/document.xml.rels":
-			relsContent, err = dp.readZipFile(file)
-			if err != nil {
-				return fmt.Errorf("error leyendo relationships: %w", err)
-			}
+			parts[file.Name] = data
 		}
 	}
 
-	if documentContent == nil {
+	if parts[partDocument] == nil {
 		return fmt.Errorf("no se encontró document.xml en el archivo DOCX")
 	}
 
 	// Parsear las relaciones si existen
-	if relsContent != nil {
-		dp.parseRelationships(relsContent)
+	if rels := parts[partRels]; rels != nil {
+		dp.parseRelationships(rels)
 	}
 
+	// Numeración, notas al pie y metadatos: todos opcionales
+	numbering := parseDocxNumbering(parts[partNumbering])
+	footnotes := parseDocxFootnotes(parts[partFootnotes])
+	core := parseDocxCoreProps(parts[partCoreProps])
+
 	// Parsear el documento
-	markdown, plainText, err := dp.parseDocument(documentContent)
+	doc, err := parseDocxDocument(parts[partDocument])
 	if err != nil {
 		return fmt.Errorf("error parseando documento: %w", err)
 	}
-	dp.lastText = plainText
+
+	// Extraer las imágenes referenciadas por el cuerpo
+	images, err := extractDocxImages(&reader.Reader, doc.images, dp.relationships, outputPath)
+	if err != nil {
+		return err
+	}
+	resolveDocxImages(doc, images)
+
+	// Renderizar el Markdown
+	renderer := newDocxRenderer(doc, numbering)
+	markdown := cleanMarkdown(renderer.render(doc))
+
+	// Frontmatter, sólo si hay metadatos
+	var sb strings.Builder
+	if frontmatter := core.renderFrontmatter(); frontmatter != "" {
+		sb.WriteString(frontmatter)
+		sb.WriteString("\n")
+	}
+	sb.WriteString(markdown)
+
+	// Definiciones de las notas al pie
+	if defs := renderFootnotes(doc.footnotes, footnotes); defs != "" {
+		sb.WriteString("\n")
+		sb.WriteString(defs)
+	}
+
+	// El texto plano incluye el de las notas al pie: es contenido del
+	// documento y cuenta para la integridad. Cada nota cuenta una sola vez,
+	// aunque se referencie varias veces.
+	plain := doc.plain.String()
+	seenNotes := make(map[int]bool, len(doc.footnotes))
+	for _, id := range doc.footnotes {
+		if seenNotes[id] {
+			continue
+		}
+		seenNotes[id] = true
+		if text, ok := footnotes[id]; ok && text != "" {
+			plain += text + " "
+		}
+	}
+	dp.lastText = plain
 
 	// Escribir el archivo Markdown
-	if err := os.WriteFile(outputPath, []byte(markdown), 0644); err != nil {
+	if err := os.WriteFile(outputPath, []byte(strings.TrimSpace(sb.String())+"\n"), 0644); err != nil {
 		return fmt.Errorf("error escribiendo archivo Markdown: %w", err)
 	}
 
@@ -101,9 +157,10 @@ type Relationships struct {
 
 // Relationship una relación individual
 type Relationship struct {
-	ID     string `xml:"Id,attr"`
-	Type   string `xml:"Type,attr"`
-	Target string `xml:"Target,attr"`
+	ID         string `xml:"Id,attr"`
+	Type       string `xml:"Type,attr"`
+	Target     string `xml:"Target,attr"`
+	TargetMode string `xml:"TargetMode,attr"`
 }
 
 // parseRelationships parsea el archivo de relaciones
@@ -114,186 +171,18 @@ func (dp *DocxProcessor) parseRelationships(content []byte) {
 	}
 
 	for _, rel := range rels.Relationships {
-		if strings.Contains(rel.Type, "hyperlink") {
-			dp.relationships[rel.ID] = rel.Target
+		dp.relationships[rel.ID] = docxRelationship{
+			ID:         rel.ID,
+			Type:       rel.Type,
+			Target:     rel.Target,
+			TargetMode: rel.TargetMode,
 		}
 	}
-}
-
-// parseDocument convierte el XML del documento a Markdown extrayendo TODOS los párrafos
-// ignorando completamente las estructuras de tabla de Word
-//
-// Devuelve el Markdown y el texto plano del documento. El texto plano se usa
-// para verificar la integridad del contenido sin parsear el DOCX otra vez.
-func (dp *DocxProcessor) parseDocument(content []byte) (string, string, error) {
-	var markdown strings.Builder
-	var plainText strings.Builder
-
-	// Usar un decoder para manejar namespaces
-	decoder := xml.NewDecoder(strings.NewReader(string(content)))
-
-	var currentParagraph strings.Builder
-	var inParagraph bool
-	var textStack []string
-	var isBold, isItalic, isStrike bool
-	var paragraphStyle string
-	var isListItem bool
-	var listLevel int
-
-	for {
-		token, err := decoder.Token()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return "", "", err
-		}
-
-		switch t := token.(type) {
-		case xml.StartElement:
-			localName := t.Name.Local
-
-			switch localName {
-			case "p":
-				inParagraph = true
-				currentParagraph.Reset()
-				paragraphStyle = ""
-				isListItem = false
-				listLevel = 0
-			case "pStyle":
-				for _, attr := range t.Attr {
-					if attr.Name.Local == "val" {
-						paragraphStyle = attr.Value
-					}
-				}
-			case "numPr":
-				isListItem = true
-			case "ilvl":
-				for _, attr := range t.Attr {
-					if attr.Name.Local == "val" {
-						fmt.Sscanf(attr.Value, "%d", &listLevel)
-					}
-				}
-			case "b":
-				isBold = true
-			case "i":
-				isItalic = true
-			case "strike":
-				isStrike = true
-			case "t":
-				textStack = append(textStack, "")
-			case "tab":
-				if inParagraph {
-					currentParagraph.WriteString("  ")
-				}
-			case "br":
-				if inParagraph {
-					currentParagraph.WriteString("\n")
-				}
-			}
-
-		case xml.CharData:
-			text := string(t)
-			if len(textStack) > 0 {
-				textStack[len(textStack)-1] += text
-			}
-
-		case xml.EndElement:
-			localName := t.Name.Local
-
-			switch localName {
-			case "t":
-				if len(textStack) > 0 {
-					text := textStack[len(textStack)-1]
-					textStack = textStack[:len(textStack)-1]
-
-					// Texto plano, sin marcas de formato, para la
-					// verificación de integridad.
-					plainText.WriteString(text)
-					plainText.WriteString(" ")
-
-					// Aplicar formato
-					if text != "" {
-						if isBold {
-							text = "**" + text + "**"
-						}
-						if isItalic {
-							text = "*" + text + "*"
-						}
-						if isStrike {
-							text = "~~" + text + "~~"
-						}
-
-						if inParagraph {
-							currentParagraph.WriteString(text)
-						}
-					}
-				}
-			case "r":
-				// Reset formato al final del run
-				isBold = false
-				isItalic = false
-				isStrike = false
-			case "p":
-				inParagraph = false
-				content := strings.TrimSpace(currentParagraph.String())
-
-				// Limpiar formato duplicado
-				content = cleanFormatting(content)
-
-				if content != "" {
-					// Aplicar estilo de párrafo
-					line := dp.applyParagraphStyle(content, paragraphStyle, isListItem, listLevel)
-					markdown.WriteString(line)
-					markdown.WriteString("\n")
-					if !isListItem {
-						markdown.WriteString("\n")
-					}
-				}
-			}
-		}
-	}
-
-	result := dp.cleanMarkdown(markdown.String())
-	return result, plainText.String(), nil
 }
 
 // ExtractedText devuelve el texto plano del último documento procesado.
 func (dp *DocxProcessor) ExtractedText() string {
 	return dp.lastText
-}
-
-// applyParagraphStyle aplica el estilo del párrafo
-func (dp *DocxProcessor) applyParagraphStyle(content, style string, isList bool, listLevel int) string {
-	styleLower := strings.ToLower(style)
-
-	// Manejar encabezados
-	switch {
-	case strings.Contains(styleLower, "heading1") || strings.Contains(styleLower, "título1") || strings.Contains(styleLower, "ttulo1"):
-		return "# " + content
-	case strings.Contains(styleLower, "heading2") || strings.Contains(styleLower, "título2") || strings.Contains(styleLower, "ttulo2"):
-		return "## " + content
-	case strings.Contains(styleLower, "heading3") || strings.Contains(styleLower, "título3") || strings.Contains(styleLower, "ttulo3"):
-		return "### " + content
-	case strings.Contains(styleLower, "heading4") || strings.Contains(styleLower, "título4") || strings.Contains(styleLower, "ttulo4"):
-		return "#### " + content
-	case strings.Contains(styleLower, "heading5") || strings.Contains(styleLower, "título5") || strings.Contains(styleLower, "ttulo5"):
-		return "##### " + content
-	case strings.Contains(styleLower, "heading6") || strings.Contains(styleLower, "título6") || strings.Contains(styleLower, "ttulo6"):
-		return "###### " + content
-	case strings.Contains(styleLower, "title") || styleLower == "título" || styleLower == "ttulo":
-		return "# " + content
-	case strings.Contains(styleLower, "subtitle"):
-		return "## " + content
-	}
-
-	// Manejar listas
-	if isList {
-		indent := strings.Repeat("  ", listLevel)
-		return indent + "- " + content
-	}
-
-	return content
 }
 
 // emptyBoldAre detecta marcas de negrita vacías. Se compila una sola vez:
@@ -302,9 +191,6 @@ var emptyBoldAre = regexp.MustCompile(`\*\*\s*\*\*`)
 
 // cleanFormatting limpia el formato duplicado
 func cleanFormatting(content string) string {
-	// Limpiar formato duplicado como ****texto****
-	content = strings.ReplaceAll(content, "****", "**")
-
 	// Limpiar ** vacíos
 	content = emptyBoldAre.ReplaceAllString(content, "")
 
@@ -312,7 +198,7 @@ func cleanFormatting(content string) string {
 }
 
 // cleanMarkdown limpia el Markdown resultante
-func (dp *DocxProcessor) cleanMarkdown(content string) string {
+func cleanMarkdown(content string) string {
 	// Eliminar múltiples líneas en blanco consecutivas
 	re := regexp.MustCompile(`\n{3,}`)
 	content = re.ReplaceAllString(content, "\n\n")
@@ -325,10 +211,6 @@ func (dp *DocxProcessor) cleanMarkdown(content string) string {
 	}
 
 	content = strings.Join(cleaned, "\n")
-
-	// Limpiar formato problemático
-	content = strings.ReplaceAll(content, "****", "**")
-	content = strings.ReplaceAll(content, "**\n**", "\n")
 
 	return strings.TrimSpace(content)
 }

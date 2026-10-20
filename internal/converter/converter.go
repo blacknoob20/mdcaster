@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -117,6 +118,10 @@ func CheckIntegrityAgainst(originalContent, markdownFile string) float64 {
 }
 
 // extractDocxContent extrae todo el contenido de texto de un archivo DOCX
+//
+// Incluye el texto de las notas al pie referenciadas en el cuerpo, para que
+// esta vía y la reutilizada por el processor den la misma cifra de
+// integridad.
 func extractDocxContent(docxPath string) (string, error) {
 	reader, err := zip.OpenReader(docxPath)
 	if err != nil {
@@ -125,17 +130,25 @@ func extractDocxContent(docxPath string) (string, error) {
 	defer reader.Close()
 
 	var documentContent []byte
+	var footnotesContent []byte
 
-	// Buscar el documento principal
+	// Buscar el documento principal y las notas al pie
 	for _, file := range reader.File {
-		if file.Name == "word/document.xml" {
+		switch file.Name {
+		case "word/document.xml":
 			rc, err := file.Open()
 			if err != nil {
 				return "", err
 			}
 			documentContent, _ = io.ReadAll(rc)
 			rc.Close()
-			break
+		case "word/footnotes.xml":
+			rc, err := file.Open()
+			if err != nil {
+				continue
+			}
+			footnotesContent, _ = io.ReadAll(rc)
+			rc.Close()
 		}
 	}
 
@@ -144,12 +157,29 @@ func extractDocxContent(docxPath string) (string, error) {
 	}
 
 	// Extraer solo el texto del XML
-	return extractTextFromXML(string(documentContent)), nil
+	text, footnoteIDs := extractTextFromXML(string(documentContent))
+
+	// Sumar el texto de las notas al pie referenciadas
+	footnotes := parseDocxFootnotes(footnotesContent)
+	seen := make(map[int]bool, len(footnoteIDs))
+	for _, id := range footnoteIDs {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		if note, ok := footnotes[id]; ok && note != "" {
+			text += note + " "
+		}
+	}
+
+	return text, nil
 }
 
-// extractTextFromXML extrae el texto de los elementos <w:t> del XML
-func extractTextFromXML(xmlContent string) string {
+// extractTextFromXML extrae el texto de los elementos <w:t> del XML y los
+// identificadores de las notas al pie referenciadas
+func extractTextFromXML(xmlContent string) (string, []int) {
 	var text strings.Builder
+	var footnoteIDs []int
 	decoder := xml.NewDecoder(strings.NewReader(xmlContent))
 
 	for {
@@ -163,7 +193,8 @@ func extractTextFromXML(xmlContent string) string {
 
 		switch t := token.(type) {
 		case xml.StartElement:
-			if t.Name.Local == "t" {
+			switch {
+			case t.Name.Local == "t":
 				// Leer el siguiente token que será el texto
 				token, err := decoder.Token()
 				if err == nil {
@@ -172,11 +203,15 @@ func extractTextFromXML(xmlContent string) string {
 						text.WriteString(" ")
 					}
 				}
+			case t.Name.Local == "footnoteReference":
+				if id, err := strconv.Atoi(strings.TrimSpace(attrValue(t, "id"))); err == nil {
+					footnoteIDs = append(footnoteIDs, id)
+				}
 			}
 		}
 	}
 
-	return text.String()
+	return text.String(), footnoteIDs
 }
 
 // nonAlphanumericAre es la expresión regular de normalización del contenido.

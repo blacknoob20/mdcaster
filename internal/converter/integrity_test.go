@@ -72,10 +72,17 @@ func readDocxPlainText(path string) (string, error) {
 	return b.String(), nil
 }
 
+// tableSeparatorAre detecta las filas de separador de las tablas Markdown.
+var tableSeparatorAre = regexp.MustCompile(`(?m)^\|[\s\-:|]+\|$`)
+
 // normalizeText colapsa espacios y elimina caracteres markdown básicos
 func normalizeText(s string) string {
+	// Las filas de separador de tabla no aportan texto: se quitan antes de
+	// comparar, porque en el original no existen.
+	s = tableSeparatorAre.ReplaceAllString(s, " ")
+
 	// Eliminar marcas Markdown simples
-	reMarks := regexp.MustCompile(`[\*\_\~\` + "`" + `#>]`)
+	reMarks := regexp.MustCompile(`[\*\_\~\` + "`" + `#>|]`)
 	s = reMarks.ReplaceAllString(s, "")
 
 	// Colapsar whitespace
