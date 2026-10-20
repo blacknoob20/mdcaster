@@ -82,6 +82,9 @@ go install ./cmd/mdclean
 
 # Combinar opciones
 ./mdcaster -i ./documentos -o ./salida -w 4
+
+# Descartar portada, índice y tablas de versión
+./mdcaster -i ./documentos --skip-before-heading
 ```
 
 ### Flags Disponibles
@@ -91,6 +94,7 @@ go install ./cmd/mdclean
 | `--input` | `-i` | Archivo o carpeta de entrada | - |
 | `--output` | `-o` | Carpeta de destino | `converted` |
 | `--workers` | `-w` | Número de workers paralelos | CPUs |
+| `--skip-before-heading` | - | Empezar en el primer encabezado (descarta portada, índice y tablas de versión) | - |
 | `--version` | - | Mostrar versión | - |
 | `--help` | - | Mostrar ayuda | - |
 
@@ -191,6 +195,7 @@ La conversión de DOCX preserva los siguientes elementos:
 - ✅ **Texto en negrita**
 - ✅ **Texto en cursiva**
 - ✅ **Texto tachado**
+- ✅ **Texto subrayado**
 - ✅ **Listas con viñetas y numeradas** (con la numeración real del documento)
 - ✅ **Tablas** (como tablas Markdown)
 - ✅ **Notas al pie**

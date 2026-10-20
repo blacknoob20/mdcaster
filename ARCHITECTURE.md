@@ -28,13 +28,15 @@ una entrada nueva y la anterior **no se reescribe**: el historial forma parte de
 | [D11](#d11--cero-dependencias-externas) | Cero dependencias externas | Aceptada |
 | [D12](#d12--el-documento-se-parsea-como-un-modelo-de-bloques) | El documento se parsea como un modelo de bloques | Aceptada |
 | [D13](#d13--la-numeración-de-listas-se-resuelve-contra-numberingxml) | La numeración de listas se resuelve contra `numbering.xml` | Aceptada |
+| [D14](#d14--el-subrayado-se-emite-como-html-en-línea) | El subrayado se emite como HTML en línea | Aceptada |
+| [D15](#d15--el-descarte-inicial-es-una-opción-del-processor) | El descarte inicial es una opción del processor | Aceptada |
 | [P1](#pendientes) | `ConvertDirectory` puede hacer `panic` | Pendiente |
 | [P2](#pendientes) | Escaneo no recursivo frente a la API recursiva | Pendiente |
 | [P3](#pendientes) | Hipervínculos DOCX parseados y no emitidos | Pendiente |
 | [P4](#pendientes) | El PDF se muestra como 0 % en vez de "no medido" | Pendiente |
 | [P6](#pendientes) | La normalización borra acentos y `ñ` | Pendiente |
 | [P7](#pendientes) | Las etiquetas de lista dentro de una celda se pierden | Pendiente |
-| [P8](#pendientes) | El subrayado no se conserva | Pendiente |
+| [P8](#pendientes) | El subrayado no se conserva | Resuelto por D14 |
 
 ---
 
@@ -306,6 +308,49 @@ composición de la `w:lvlText` (`%1.%2.`). Los contadores no se reinician al cam
 - Un párrafo numerado vacío no se escribe, pero **consume su número**: es lo que hace Word, y de
   lo contrario las etiquetas siguientes se descuadran.
 
+### D14 — El subrayado se emite como HTML en línea
+
+**Estado:** aceptada. Resuelve [P8](#pendientes)
+
+**Contexto.** Word subraya con `<w:u>`; Markdown no tiene subrayado. `docx2md-cli` lo resuelve
+emitiendo `<u>texto</u>`, que es HTML en línea. En el corpus institucional hay 273 elementos
+`<w:u>` en 73 documentos: no es un detalle, es contenido que se perdía.
+
+**Decisión.** El subrayado se emite como `<u>texto</u>`, y se aplica **por fuera** del énfasis de
+Markdown, para que las marcas de dentro sigan interpretándose: un texto en negrita y subrayado sale
+`<u>**texto**</u>`.
+
+**Consecuencias.**
+
+- El resultado es Markdown con una isla de HTML en línea. Lo renderizan CommonMark y GitHub.
+- Un subrayado con `w:val="none"` no se emite: es el equivalente de la negrita desactivada.
+- Es la misma decisión que ya se tomaba dentro de los bloques `<ol type="a">`, donde el Markdown
+  tampoco se procesa y el contenido se emite con HTML en línea.
+
+### D15 — El descarte inicial es una opción del processor
+
+**Estado:** aceptada
+
+**Contexto.** `docx2md-cli` tiene `--skip-before-heading`: descarta la portada, el índice y las
+tablas de versión que anteceden al primer encabezado. En el corpus institucional son 1.140 líneas
+que no son cuerpo del documento.
+
+**Decisión.** La opción la aplica el **processor**, no la CLI: el texto plano que se extrae para
+la verificación de integridad se recorta en el mismo punto, de modo que la métrica mide el
+contenido que se conserva y no baja por un descarte intencionado. Si el documento no tiene ningún
+encabezado, se conserva todo.
+
+La opción llega al processor por una interfaz opcional, `SkipBeforeHeadingSetter`, igual que
+`TextExtractor`: los formatos que no la soportan (el PDF) la ignoran.
+
+**Consecuencias.**
+
+- `FileProcessor.Process` **no cambia de firma**: la opción va por el estado del procesador.
+- El descarte es **por bloques**, no por líneas: una tabla que está antes del primer encabezado
+  desaparece entera, no se descuartan sus celdas.
+- Medido sobre el corpus: 51.231 líneas sin el descarte y 50.091 con él, con la integridad en
+  99,16 % en ambos casos.
+
 ---
 
 ## Pendientes
@@ -366,9 +411,10 @@ Medido: 8 etiquetas perdidas en 4 documentos del corpus institucional.
 
 ### P8 — El subrayado no se conserva
 
-`<w:u>` se ignora: Markdown no tiene subrayado. `docx2md-cli` lo emite como `<u>texto</u>`.
+**Resuelto por [D14](#d14--el-subrayado-se-emite-como-html-en-línea).**
 
-**Opciones:** emitirlo como HTML en línea, como se hace dentro de los `<ol>`, o aceptar el límite.
+`<w:u>` se ignoraba: Markdown no tiene subrayado. Ahora se emite como `<u>texto</u>`, el mismo
+HTML en línea que usa `docx2md-cli`.
 
 ---
 
