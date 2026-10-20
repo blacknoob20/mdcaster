@@ -18,12 +18,44 @@ var (
 	flagTDR     = flag.Bool("tdr", false, "Clean/format TDR-style Markdown exported from DOCX/PDF")
 )
 
+// Las expresiones regulares se compilan una sola vez, al inicio del paquete.
+// Compilarlas dentro de estas funciones, que se llaman por cada línea del
+// fichero, multiplicaba el coste de la limpieza por diez.
 var twoPlusSpaces = regexp.MustCompile(`\s{2,}`)
 var boldOnlyLine = regexp.MustCompile(`^\*\*(.+?)\*\*\s*$`)
 var italicOnlyLine = regexp.MustCompile(`^\*(.+?)\*\s*$`)
 var pageNumberLine = regexp.MustCompile(`^Pág\.?\s*\d+\s*$`)
 var digitsOnlyLine = regexp.MustCompile(`^\d{1,3}$`)
 var dotLeaderRun = regexp.MustCompile(`\s*\.{5,}\s*`)
+var indexNumber = regexp.MustCompile(`^\d+\.$`)
+
+// Marcadores de sección que nunca deben unirse con la línea siguiente.
+var (
+	reNotaGeneral           = regexp.MustCompile(`^NOTA GENERAL:$`)
+	reTituloCapituloSeccion = regexp.MustCompile(`^(TITULO|Capítulo|Sección)\b`)
+	reArticulo              = regexp.MustCompile(`^Art\.`)
+	reConcordancias         = regexp.MustCompile(`^(Concordancias|Jurisprudencia):$`)
+	reInstitucional         = regexp.MustCompile(`^(FUNCION EJECUTIVA|ASAMBLEA NACIONAL|PRESIDENCIA DE LA REPUBLICA)\b`)
+	reElPleno               = regexp.MustCompile(`^EL PLENO$`)
+	reConsiderando          = regexp.MustCompile(`^CONSIDERANDO:$`)
+	reBullet                = regexp.MustCompile(`^[-*]\s+`)
+	reEnumeracion           = regexp.MustCompile(`^[a-zA-Z]\)\s+`)
+	reItemNumerado          = regexp.MustCompile(`^\d+\.-\s+`)
+)
+
+// structuralLines agrupa los marcadores de sección del corpus institucional.
+var structuralLines = []*regexp.Regexp{
+	reNotaGeneral,
+	reTituloCapituloSeccion,
+	reArticulo,
+	reConcordancias,
+	reInstitucional,
+	reElPleno,
+	reConsiderando,
+}
+
+// Secciones que en el modo TDR se convierten en encabezado de nivel 2.
+var reSeccionTDR = regexp.MustCompile(`^(GOBIERNO|GAD|MUNICIPAL|DIRECCIÓN|COORDINACIÓN|SECCIÓN|OBJETO|NOMBRE|CONTRATACIÓN|TÉRMINOS|ANTECEDENTES|JUSTIFICACION|OBJETIVOS|ALCANCE|METODOLOGÍA|INFORMACIÓN|PRODUCTOS|PLAZO|PERSONAL|FORMA|CONDICIONES|ANEXO)`)
 
 func isStructuralLine(line string) bool {
 	trimmed := strings.TrimSpace(line)
@@ -39,29 +71,20 @@ func isStructuralLine(line string) bool {
 
 	// Headings / section markers common in this corpus.
 	// Keep conservative: don't join across these.
-	structural := []*regexp.Regexp{
-		regexp.MustCompile(`^NOTA GENERAL:$`),
-		regexp.MustCompile(`^(TITULO|Capítulo|Sección)\b`),
-		regexp.MustCompile(`^Art\.`),
-		regexp.MustCompile(`^(Concordancias|Jurisprudencia):$`),
-		regexp.MustCompile(`^(FUNCION EJECUTIVA|ASAMBLEA NACIONAL|PRESIDENCIA DE LA REPUBLICA)\b`),
-		regexp.MustCompile(`^EL PLENO$`),
-		regexp.MustCompile(`^CONSIDERANDO:$`),
-	}
-	for _, re := range structural {
+	for _, re := range structuralLines {
 		if re.MatchString(trimmed) {
 			return true
 		}
 	}
 
 	// Bullets / enumerations: keep line breaks.
-	if regexp.MustCompile(`^[-*]\s+`).MatchString(trimmed) {
+	if reBullet.MatchString(trimmed) {
 		return true
 	}
-	if regexp.MustCompile(`^[a-zA-Z]\)\s+`).MatchString(trimmed) {
+	if reEnumeracion.MatchString(trimmed) {
 		return true
 	}
-	if regexp.MustCompile(`^\d+\.-\s+`).MatchString(trimmed) {
+	if reItemNumerado.MatchString(trimmed) {
 		return true
 	}
 
@@ -86,11 +109,11 @@ func isTDRStructuralLine(line string) bool {
 	if strings.HasPrefix(trimmed, "![](") {
 		return true
 	}
-	if regexp.MustCompile(`^[-*]\s+`).MatchString(trimmed) {
+	if reBullet.MatchString(trimmed) {
 		return true
 	}
 	// Preserve explicit section labels like "1." "2." in indices.
-	if regexp.MustCompile(`^\d+\.$`).MatchString(trimmed) {
+	if indexNumber.MatchString(trimmed) {
 		return true
 	}
 	return false
@@ -345,7 +368,7 @@ func processTDR(lines []string) []string {
 			continue
 		}
 		// Common section headers in this document.
-		if regexp.MustCompile(`^(GOBIERNO|GAD|MUNICIPAL|DIRECCIÓN|COORDINACIÓN|SECCIÓN|OBJETO|NOMBRE|CONTRATACIÓN|TÉRMINOS|ANTECEDENTES|JUSTIFICACION|OBJETIVOS|ALCANCE|METODOLOGÍA|INFORMACIÓN|PRODUCTOS|PLAZO|PERSONAL|FORMA|CONDICIONES|ANEXO)`).MatchString(upper) {
+		if reSeccionTDR.MatchString(upper) {
 			headed = append(headed, "## "+content)
 			continue
 		}
@@ -384,7 +407,12 @@ func processTDR(lines []string) []string {
 	// Pass 6: unwrap paragraphs (reduce line count) but keep structure lines intact.
 	out := make([]string, 0, len(italics))
 	for i := 0; i < len(italics); i++ {
+		// El párrafo se acumula en un builder para no copiar la cadena en
+		// cada unión (coste O(n²) en párrafos largos).
+		var b strings.Builder
+		b.WriteString(italics[i])
 		cur := italics[i]
+
 		for i+1 < len(italics) && !isTDRStructuralLine(cur) && !isTDRStructuralLine(italics[i+1]) {
 			trimRight := strings.TrimRightFunc(cur, unicode.IsSpace)
 			if trimRight == "" {
@@ -394,8 +422,10 @@ func processTDR(lines []string) []string {
 			if r == '.' || r == '!' || r == '?' || r == ':' {
 				break
 			}
-			cur = cur + joinerBetweenTDR(cur, italics[i+1]) + strings.TrimLeftFunc(italics[i+1], unicode.IsSpace)
+			b.WriteString(joinerBetweenTDR(cur, italics[i+1]))
+			b.WriteString(strings.TrimLeftFunc(italics[i+1], unicode.IsSpace))
 			i++
+			cur = b.String()
 		}
 		out = append(out, cur)
 	}
@@ -424,7 +454,7 @@ func normalizeTDRTOC(lines []string) []string {
 			}
 
 			// Merge lines like "1." + "ANTECEDENTES ... 2".
-			if regexp.MustCompile(`^\d+\.$`).MatchString(trimmed) {
+			if indexNumber.MatchString(trimmed) {
 				j := i + 1
 				for j < len(lines) && strings.TrimSpace(lines[j]) == "" {
 					j++
@@ -487,12 +517,18 @@ func fixQuotedItalicSpans(lines []string) []string {
 
 		buf := strings.TrimRightFunc(line, unicode.IsSpace)
 		j := i + 1
+		// El fragmento se acumula en un builder para no copiar la cadena en
+		// cada línea (coste O(n²) en fragmentos largos).
+		var b strings.Builder
+		b.WriteString(buf)
 		for ; j < len(lines); j++ {
-			buf = buf + " " + strings.TrimSpace(lines[j])
+			b.WriteString(" ")
+			b.WriteString(strings.TrimSpace(lines[j]))
 			if strings.Contains(lines[j], "*\"") {
 				break
 			}
 		}
+		buf = b.String()
 		// If we never found the closing marker, just emit the joined text.
 		if !strings.Contains(buf[start+2:], "*\"") {
 			out = append(out, collapseSpaces(buf))
@@ -746,10 +782,17 @@ func readAllLines(r io.Reader) ([]string, error) {
 func process(lines []string) []string {
 	out := make([]string, 0, len(lines))
 	for i := 0; i < len(lines); i++ {
+		// El párrafo se acumula en un builder para no copiar la cadena en
+		// cada unión (coste O(n²) en párrafos largos).
+		var b strings.Builder
+		b.WriteString(lines[i])
 		cur := lines[i]
+
 		for i+1 < len(lines) && shouldJoin(cur, lines[i+1]) {
-			cur = cur + joinerBetween(cur, lines[i+1]) + lines[i+1]
+			b.WriteString(joinerBetween(cur, lines[i+1]))
+			b.WriteString(lines[i+1])
 			i++
+			cur = b.String()
 		}
 		out = append(out, cur)
 	}
