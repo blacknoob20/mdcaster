@@ -29,7 +29,7 @@ y poder demostrarlo con un porcentaje de integridad por archivo.
 | Capa | Ruta | Responsabilidad |
 |---|---|---|
 | **CLI conversión** | `cmd/mdcaster/` | Flags, validación de entrada, escaneo, pool de workers, reporte con color |
-| **CLI limpieza** | `cmd/mdclean/` | Normalización de Markdown (genérica o TDR), escritura a stdout o in-place |
+| **CLI limpieza** | `cmd/mdclean/` | Normalización de Markdown (genérica o TDR), escritura a stdout o in-place. Ficheros: `main.go` (CLI), `generic.go` (modo genérico), `tdr.go` (modo TDR), `corpus.go` (datos del corpus), `markdown.go` (primitivas compartidas) |
 | **Dispatcher** | `internal/converter/converter.go` | API interna (`Converter`), conversión por archivo y por directorio, `CheckIntegrity` |
 | **Factory** | `internal/converter/processor.go` | Interfaz `FileProcessor`, registro y resolución de procesadores por extensión |
 | **Procesadores** | `internal/converter/docx_processor.go`, `docx_parser.go`, `docx_render.go`, `docx_numbering.go`, `docx_footnotes.go`, `docx_frontmatter.go`, `docx_images.go`, `pdf_processor.go` | Conversión específica por formato |
@@ -115,11 +115,11 @@ Entrada (.md)
 | Línea en blanco tras párrafo | 1 si es lista, 2 si no | `internal/converter/docx_render.go` |
 | Comandos PDF | `pdftotext -layout <in> -` | `internal/converter/pdf_processor.go:37` |
 | Salida PDF | texto plano sin estructura Markdown | `internal/converter/pdf_processor.go:43` |
-| Expresiones regulares | compiladas **una vez**, al inicio del paquete | `cmd/mdclean/main.go:24-58` |
-| Acumulación de párrafos | con `strings.Builder`, no con `+` | `cmd/mdclean/main.go:782-800` |
-| `mdclean` sin `--tdr` | une líneas "envueltas" | `cmd/mdclean/main.go:782-800` |
-| `mdclean` con `--tdr` | 7 pasadas de normalización | `cmd/mdclean/main.go:243-435` |
-| Escritura `mdclean` | con salto de línea final garantizado | `cmd/mdclean/main.go:802-821` |
+| Expresiones regulares | compiladas **una vez**, al inicio del paquete | `cmd/mdclean/generic.go:18`, `cmd/mdclean/tdr.go:16-24`, `cmd/mdclean/corpus.go:32-45` |
+| Acumulación de párrafos | con `strings.Builder`, no con `+` | `cmd/mdclean/generic.go:45-64`, `cmd/mdclean/tdr.go:300-328` |
+| `mdclean` sin `--tdr` | une líneas "envueltas" | `cmd/mdclean/generic.go:45-64` |
+| `mdclean` con `--tdr` | 9 etapas de normalización (7 pasadas y 2 sub-pasos) | `cmd/mdclean/tdr.go:26-39` |
+| Escritura `mdclean` | con salto de línea final garantizado | `cmd/mdclean/main.go:110-134` |
 | Color de la salida | códigos ANSI de la stdlib; se desactiva sin terminal, con `NO_COLOR` o `TERM=dumb` | `cmd/mdcaster/ansi.go:24-51` |
 
 ## Taxonomía de errores
@@ -145,8 +145,8 @@ Entrada (.md)
 | `ERR_MDC_PATH_NOT_FOUND` | `cmd/mdcaster/main.go:87` | `❌ Error: La ruta '%s' no existe` → **exit 1** |
 | `ERR_MDC_UNSUPPORTED_TYPE` | `cmd/mdcaster/main.go:123` | `❌ Error: El archivo '%s' no es de un tipo soportado` → **exit 1** |
 | `ERR_MDC_NO_SUPPORTED_FILES` | `cmd/mdcaster/main.go:117` | `⚠️  No se encontraron archivos soportados en la carpeta` → **exit 0** |
-| `ERR_MDC_USAGE` | `cmd/mdclean/main.go:831` | usage en stderr → **exit 2** |
-| `ERR_MDCLEAN_OPEN` / `ERR_MDCLEAN_READ` / `ERR_MDCLEAN_WRITE` | `cmd/mdclean/main.go:837, 845, 861, 877` | mensaje en stderr → **exit 1** |
+| `ERR_MDC_USAGE` | `cmd/mdclean/main.go:43-47` | usage en stderr → **exit 2** |
+| `ERR_MDCLEAN_OPEN` / `ERR_MDCLEAN_READ` / `ERR_MDCLEAN_WRITE` | `cmd/mdclean/main.go:49-52, 57-60, 67-84, 88-90` | mensaje en stderr → **exit 1** |
 
 Códigos de salida:
 

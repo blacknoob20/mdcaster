@@ -30,6 +30,7 @@ una entrada nueva y la anterior **no se reescribe**: el historial forma parte de
 | [D13](#d13--la-numeración-de-listas-se-resuelve-contra-numberingxml) | La numeración de listas se resuelve contra `numbering.xml` | Aceptada |
 | [D14](#d14--el-subrayado-se-emite-como-html-en-línea) | El subrayado se emite como HTML en línea | Aceptada |
 | [D15](#d15--el-descarte-inicial-es-una-opción-del-processor) | El descarte inicial es una opción del processor | Aceptada |
+| [D16](#d16--mdclean-se-parte-por-responsabilidad) | `mdclean` se parte por responsabilidad | Aceptada |
 | [P1](#pendientes) | `ConvertDirectory` puede hacer `panic` | Pendiente |
 | [P2](#pendientes) | Escaneo no recursivo frente a la API recursiva | Pendiente |
 | [P3](#pendientes) | Hipervínculos DOCX parseados y no emitidos | Pendiente |
@@ -350,6 +351,50 @@ La opción llega al processor por una interfaz opcional, `SkipBeforeHeadingSette
   desaparece entera, no se descuartan sus celdas.
 - Medido sobre el corpus: 51.231 líneas sin el descarte y 50.091 con él, con la integridad en
   99,16 % en ambos casos.
+
+---
+
+### D16 — `mdclean` se parte por responsabilidad
+
+**Estado:** aceptada
+
+**Contexto.** `cmd/mdclean/main.go` llegó a 914 líneas con 25 funciones: la CLI, el modo genérico, el
+modo TDR, las expresiones regulares y los datos del corpus institucional (cabeceras, imágenes,
+secciones) en un solo fichero. El modo TDR era el peor caso: `processTDR` tenía 194 líneas con nueve
+etapas dentro, y el código se repetía. El colapso de líneas en blanco estaba en dos sitios, la fusión
+de negrita y la de cursiva eran el mismo bucle con otra expresión regular, la comprobación de estructura
+de Markdown estaba duplicada en los dos modos y la lista de palabras cortas del español aparecía dos
+veces.
+
+**Decisión.** El comando se parte en cinco ficheros **del mismo paquete**, sin cambiar el comportamiento
+ni la interfaz:
+
+| Fichero | Responsabilidad |
+|---|---|
+| `cmd/mdclean/main.go` | CLI: flags, lectura y escritura, frontmatter |
+| `cmd/mdclean/generic.go` | Modo genérico: unir líneas partidas por un extractor |
+| `cmd/mdclean/tdr.go` | Modo TDR: la tubería de nueve etapas, una función por etapa |
+| `cmd/mdclean/corpus.go` | Datos del corpus institucional |
+| `cmd/mdclean/markdown.go` | Primitivas compartidas por los dos modos |
+
+Y se deduplica: `collapseBlankLines`, `mergeEmphasisLines`, `isMarkdownStructureLine`, `isShortWord` y
+una sola implementación de `wordToken` para las dos direcciones.
+
+**Consecuencias.**
+
+- El fichero mayor pasa de 914 a 503 líneas, y el código real (sin comentarios ni líneas en blanco)
+  baja de 754 a 743: la duplicación retirada pesa más que el esqueleto de las etapas con nombre.
+- Los datos del corpus quedan aislados: generalizar el modo TDR es tocar `corpus.go`, no el comando.
+  Es la consecuencia que D6 dejaba abierta.
+- **Comportamiento idéntico, verificado**: 312 documentos (300 generados al azar más 12 casos límite:
+  fichero vacío, frontmatter sin cerrar, UTF-8 inválido, CRLF, línea de 1 MB, imagen partida) producen
+  una salida byte a byte igual que la implementación anterior.
+- El modo TDR reserva un **17 % menos de memoria** (17,3 MB → 14,4 MB con 10.000 líneas) y 80
+  alocaciones menos, al prealoctar el resultado de cada etapa. El modo genérico no cambia.
+- La lista de palabras cortas se comprueba con un `switch` y no con un mapa: el `switch` cuesta 3,5 ns
+  y la búsqueda 48 ns, y se consulta dos veces por cada par de líneas que se une. Medido con las dos
+  implementaciones en el mismo binario, porque el ruido de la máquina (±40 %) supera el efecto de
+  cualquier cambio pequeño.
 
 ---
 
