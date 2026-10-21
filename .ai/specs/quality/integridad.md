@@ -86,7 +86,7 @@ Medido sobre el corpus real:
 El texto con el que se compara el Markdown **lo extrae el processor al convertir**. No hay una
 segunda lectura del original.
 
-`DocxProcessor` guarda el texto plano que extrajo y lo expone mediante la interfaz opcional
+`docx.Processor` guarda el texto plano que extrajo y lo expone mediante la interfaz opcional
 `TextExtractor`:
 
 ```go
@@ -159,7 +159,7 @@ por el valor 0.
 
 ## Limitación vigente: **solo DOCX**
 
-La verificación mide el texto que expone el processor, y el del PDF no lo expone: `PdfProcessor`
+La verificación mide el texto que expone el processor, y el del PDF no lo expone: `pdf.Processor`
 no implementa `TextExtractor`, así que el resultado es `0`.
 
 **Consecuencia visible:** al convertir un PDF, `mdcaster` muestra **🔴 0.0 %** aunque la conversión

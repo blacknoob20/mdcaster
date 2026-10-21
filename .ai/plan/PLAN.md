@@ -19,6 +19,7 @@
 | 6 — Partición por responsabilidad | completada | `mdclean` en cinco ficheros (D16) y el dispatcher en dos, con el código muerto eliminado (D17) |
 | 7 — Partición del parser DOCX | completada | El parser del DOCX en cuatro ficheros y `startElement` descompuesta por familia de elementos (D18) |
 | 8 — Partición del render DOCX | completada | El render del DOCX en tres ficheros y la numeración en tres (D19) |
+| 9 — Subpaquetes por formato | completada | `internal/converter/docx/` y `internal/converter/pdf/`, con la raíz como fachada (D20) |
 
 Verificación final de la fase 0-3: `gofmt` limpio, `go vet` limpio, `go test ./...` en verde,
 compila para linux, darwin y windows (amd64), 52 enlaces markdown y 111 referencias de código
@@ -38,7 +39,7 @@ contenido, misma estructura y la numeración real que muestra Word.
 | ID | Decisión | Estado |
 |---|---|---|
 | D1 | Factory Pattern: un procesador por formato tras la interfaz `FileProcessor` | Aceptada |
-| D2 | Una `Converter` por worker. `DocxProcessor` guarda estado, así que compartirlo daría carreras | Aceptada |
+| D2 | Una `Converter` por worker. `docx.Processor` guarda estado, así que compartirlo daría carreras | Aceptada |
 | D3 | DOCX solo con biblioteca estándar (`archive/zip`, `encoding/xml`) | Aceptada |
 | D4 | PDF mediante `pdftotext -layout`. **Excepción documentada**: la stdlib de Go no tiene parser de PDF | Aceptada como excepción |
 | D5 | Integridad medida como cobertura de palabras del original | Reemplazada por D10 |
@@ -56,6 +57,7 @@ contenido, misma estructura y la numeración real que muestra Word.
 | D17 | El dispatcher se parte en dos ficheros por responsabilidad y se elimina el código muerto | Aceptada |
 | D18 | El parser del DOCX se parte en cuatro ficheros por responsabilidad | Aceptada |
 | D19 | El render del DOCX se parte en tres ficheros y la numeración en tres | Aceptada |
+| D20 | Cada formato vive en su propio paquete; la raíz es la fachada | Aceptada |
 
 ### Pendientes
 

@@ -1,4 +1,4 @@
-package converter
+package docx
 
 // numCounter es el contador de un nivel de una lista.
 type numCounter struct {

@@ -72,7 +72,7 @@ posicional → `ERR_MDC_INPUT_MISSING`, se imprime el usage y se sale con **cód
 Con el flag activo, la conversión de los DOCX **empieza en el primer encabezado**: se descartan
 la portada, el índice y las tablas de versión que lo anteceden.
 
-1. El descarte lo aplica el processor (`DocxProcessor`), no la CLI: el texto que se extrae para la
+1. El descarte lo aplica el processor (`docx.Processor`), no la CLI: el texto que se extrae para la
    verificación de integridad se recorta también, de modo que la mide **sobre el contenido que se
    conserva** y no baja por un descarte intencionado.
 2. Si el documento **no tiene ningún encabezado**, se conserva todo: descartar un documento

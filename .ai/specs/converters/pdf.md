@@ -1,7 +1,8 @@
-# SPEC — `internal/converter/pdf_processor.go` (PDF → texto plano)
+# SPEC — `internal/converter/pdf/` (PDF → texto plano)
 
 **Módulo:** `converters/pdf`
-**Código:** `internal/converter/pdf_processor.go`
+**Paquete:** `internal/converter/pdf` (package `pdf`)
+**Código:** `processor.go`
 **Implementa:** `converter.FileProcessor`
 **Dependencias:** `os/exec` (binario externo `pdftotext`)
 
@@ -11,6 +12,12 @@
 
 Convertir un `.pdf` a un fichero de texto plano en `outputPath`. **No** se genera Markdown
 estructurado: el PDF no aporta la semántica de títulos y listas que sí tiene el DOCX.
+
+## API pública
+
+El paquete expone **dos** identificadores: `NewProcessor() *Processor` y `Processor`, que
+implementa `Process`. El paquete **no importa** `internal/converter`: implementa la interfaz del
+dispatcher de forma implícita.
 
 > **Excepción documentada a la regla de cero dependencias.**
 > Ver [decisión D4](../../../ARCHITECTURE.md#d4--pdf-con-pdftotext-excepción-documentada).
@@ -29,17 +36,17 @@ estructurado: el PDF no aporta la semántica de títulos y listas que sí tiene 
 | Extensión registrada | `.pdf` (minúsculas) |
 | Dependencia | `pdftotext` (poppler-utils) **en el PATH** |
 
-## Flujo de `Process` — `internal/converter/pdf_processor.go:20-32`
+## Flujo de `Process` — `internal/converter/pdf/processor.go:20-32`
 
 ```
 1. extractText(inputPath)          → ERR_PDFTOTEXT
 2. os.WriteFile(outputPath, text, 0644) → ERR_WRITE_MARKDOWN
 ```
 
-`PdfProcessor` no tiene estado: es un struct vacío. `NewPdfProcessor()` (líneas 15-17) devuelve un
-`&PdfProcessor{}`.
+`pdf.Processor` no tiene estado: es un struct vacío. `NewProcessor()` (líneas 14-16) devuelve un
+`&pdf.Processor{}`.
 
-## `extractText` — `internal/converter/pdf_processor.go:34-43`
+## `extractText` — `internal/converter/pdf/processor.go:34-43`
 
 ```
 cmd := exec.Command("pdftotext", "-layout", inputPath, "-")
@@ -71,7 +78,7 @@ Este mensaje es **parte del contrato**: nombra la dependencia y la acción corre
 
 ## Relación con la verificación de integridad
 
-**`CheckIntegrity` no soporta PDF.** `PdfProcessor` no implementa la interfaz `TextExtractor`, de
+**`CheckIntegrity` no soporta PDF.** `pdf.Processor` no implementa la interfaz `TextExtractor`, de
 modo que no expone el texto que extrajo y la verificación no tiene con qué comparar: el resultado
 es `0`.
 
@@ -88,6 +95,6 @@ Ver [../quality/integridad.md](../quality/integridad.md).
    lectura y las tablas se desarman.
 3. El processor no valida que el fichero sea realmente un PDF: delega en `pdftotext`, que es quien
    decide. Un fichero renombrado a `.pdf` produce un error de `pdftotext`, no un error de validación.
-4. `PdfProcessor` es stateless y seguro para uso concurrente.
+4. `pdf.Processor` es stateless y seguro para uso concurrente.
 5. Un PDF protegido con contraseña o corrupto produce `ERR_PDFTOTEXT`. El mensaje no distingue
    ambos casos: el detalle real de `pdftotext` no se propaga (solo stdout se captura).

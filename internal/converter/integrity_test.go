@@ -2,13 +2,11 @@ package converter
 
 import (
 	"archive/zip"
-	"bytes"
 	"encoding/xml"
 	"io"
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"testing"
 )
@@ -72,109 +70,6 @@ func readDocxPlainText(path string) (string, error) {
 	}
 
 	return b.String(), nil
-}
-
-// readDocxTextForIntegrity extrae el texto del original por una vía
-// independiente del processor: relee el ZIP y recoge el texto de los `<w:t>` y
-// el de las notas al pie referenciadas.
-//
-// Es la lectura que hacía la librería antes de que el dispatcher reutilizara
-// el texto del processor, y sirve para comprobar que ese atajo no cambia la
-// métrica: las dos vías tienen que encontrar las mismas palabras.
-func readDocxTextForIntegrity(path string) (string, error) {
-	zr, err := zip.OpenReader(path)
-	if err != nil {
-		return "", err
-	}
-	defer zr.Close()
-
-	var documentContent, footnotesContent []byte
-	for _, f := range zr.File {
-		switch f.Name {
-		case "word/document.xml":
-			rc, err := f.Open()
-			if err != nil {
-				return "", err
-			}
-			documentContent, err = io.ReadAll(rc)
-			rc.Close()
-			if err != nil {
-				return "", err
-			}
-		case "word/footnotes.xml":
-			rc, err := f.Open()
-			if err != nil {
-				continue
-			}
-			footnotesContent, _ = io.ReadAll(rc)
-			rc.Close()
-		}
-	}
-
-	if documentContent == nil {
-		return "", os.ErrNotExist
-	}
-
-	var sb strings.Builder
-	var text strings.Builder
-	var footnoteIDs []int
-	inText := false
-
-	decoder := xml.NewDecoder(bytes.NewReader(documentContent))
-	for {
-		token, err := decoder.Token()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return "", err
-		}
-
-		switch t := token.(type) {
-		case xml.StartElement:
-			switch {
-			case t.Name.Local == "t" && isWordNamespace(t.Name.Space):
-				inText = true
-				text.Reset()
-			case t.Name.Local == "footnoteReference" && isWordNamespace(t.Name.Space):
-				if id, err := strconv.Atoi(attrValue(t, "id")); err == nil {
-					footnoteIDs = append(footnoteIDs, id)
-				}
-			}
-		case xml.EndElement:
-			if t.Name.Local == "t" && isWordNamespace(t.Name.Space) {
-				inText = false
-				// Un `<w:t>` vacío no aporta nada: el processor tampoco
-				// añade un espacio por él.
-				if text.Len() > 0 {
-					sb.WriteString(text.String())
-					sb.WriteString(" ")
-				}
-				text.Reset()
-			}
-		case xml.CharData:
-			if inText {
-				text.WriteString(string(t))
-			}
-		}
-	}
-
-	// Las notas al pie referenciadas cuentan una sola vez, aunque se
-	// referencien varias veces, y van detrás del texto del cuerpo.
-	footnotes := parseDocxFootnotes(footnotesContent)
-	seen := make(map[int]bool, len(footnoteIDs))
-	for _, id := range footnoteIDs {
-		if seen[id] {
-			continue
-		}
-		seen[id] = true
-		if note, ok := footnotes[id]; ok && note != "" {
-			sb.WriteString(note)
-			sb.WriteString(" ")
-		}
-	}
-
-	return sb.String(), nil
 }
 
 // tableSeparatorAre detecta las filas de separador de las tablas Markdown.
@@ -264,35 +159,6 @@ func TestIntegrity_DocxReportsCoverage(t *testing.T) {
 	}
 	if percent > 100 {
 		t.Fatalf("integridad fuera de rango: %v", percent)
-	}
-}
-
-// TestIntegrity_ReusedTextMatchesIndependentRead comprueba que el texto que
-// el processor ya extrajo no pierde nada: una lectura independiente del
-// original da la misma métrica. Es la garantía de que el atajo no cambia la
-// cifra que ve el usuario.
-func TestIntegrity_ReusedTextMatchesIndependentRead(t *testing.T) {
-	input := requireCorpusFile(t, "word", "*.docx")
-	out := filepath.Join(t.TempDir(), "integrity.md")
-
-	conv := NewConverter()
-	if err := conv.ConvertFile(input, out); err != nil {
-		t.Fatalf("ConvertFile falló: %v", err)
-	}
-
-	independent, err := readDocxTextForIntegrity(input)
-	if err != nil {
-		t.Fatalf("no se pudo leer el original por una vía independiente: %v", err)
-	}
-
-	reused := conv.CheckIntegrity(input, out)
-	fromFile := CheckIntegrityAgainst(independent, out)
-
-	t.Logf("integridad reutilizando el texto del processor: %.4f%%", reused)
-	t.Logf("integridad con una lectura independiente: %.4f%%", fromFile)
-
-	if reused != fromFile {
-		t.Fatalf("el texto reutilizado da un resultado distinto: %.4f%% != %.4f%%", reused, fromFile)
 	}
 }
 

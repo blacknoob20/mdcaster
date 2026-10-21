@@ -5,6 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"mdcaster/internal/converter/docx"
+	"mdcaster/internal/converter/pdf"
 )
 
 // FileProcessor define la interfaz para procesar diferentes tipos de archivo
@@ -46,8 +49,8 @@ func NewProcessorFactory() *ProcessorFactory {
 	}
 
 	// Registrar procesadores disponibles
-	pf.processors[".docx"] = NewDocxProcessor()
-	pf.processors[".pdf"] = NewPdfProcessor()
+	pf.processors[".docx"] = docx.NewProcessor()
+	pf.processors[".pdf"] = pdf.NewProcessor()
 
 	return pf
 }

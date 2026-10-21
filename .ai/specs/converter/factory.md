@@ -31,7 +31,7 @@ suficiente para cualquier formato de entrada.
 ## Contrato: `FileProcessor`
 
 ```go
-// internal/converter/processor.go:11-13
+// internal/converter/processor.go:14-16
 type FileProcessor interface {
     Process(inputPath, outputPath string) error
 }
@@ -45,7 +45,7 @@ Reglas del contrato:
 4. `Process` devuelve `nil` en éxito; en error devuelve un error envuelto con `%w` y prefijo en español.
 5. `Process` no debe imprimir nada por stdout/stderr: la presentación es de la CLI.
 6. `Process` debe ser seguro para uso concurrente desde varias goroutines **solo si** cada instancia
-   tiene su propio estado (ver `DocxProcessor.relationships`).
+   tiene su propio estado (ver `docx.Processor.relationships`).
 
 ### Interfaz opcional: `TextExtractor`
 
@@ -60,7 +60,7 @@ type TextExtractor interface {
 No forma parte de `FileProcessor`. Es **opcional**: un procesador que no la implemente sigue siendo
 válido, y la verificación de integridad recurre a leer el original desde disco.
 
-La implementa `DocxProcessor`, que guarda el texto que ya extrajo al convertir. Así la CLI puede
+La implementa `docx.Processor`, que guarda el texto que ya extrajo al convertir. Así la CLI puede
 verificar la integridad sin parsear el DOCX por segunda vez. Ver
 [../quality/integridad.md](../quality/integridad.md).
 
@@ -81,7 +81,7 @@ type SkipBeforeHeadingSetter interface {
 No forma parte de `FileProcessor`. Es **opcional**: un procesador que no la implemente sigue siendo
 válido, y simplemente ignora la opción.
 
-La implementa `DocxProcessor`. La CLI la activa con `--skip-before-heading`, que descarta la
+La implementa `docx.Processor`. La CLI la activa con `--skip-before-heading`, que descarta la
 portada, el índice y las tablas de versión de los DOCX. El PDF no la implementa: no tiene
 encabezados.
 
@@ -91,7 +91,7 @@ laplica solo a los que la implementan.
 ## `ProcessorFactory`
 
 ```go
-// internal/converter/processor.go:27-29
+// internal/converter/processor.go:41-43
 type ProcessorFactory struct {
     processors map[string]FileProcessor
 }
@@ -99,12 +99,12 @@ type ProcessorFactory struct {
 
 | Método | Línea | Contrato |
 |---|---|---|
-| `NewProcessorFactory() *ProcessorFactory` | 21-31 | Crea la factory con losprocessors registrados: `.docx` → `DocxProcessor`, `.pdf` → `PdfProcessor`. |
-| `GetProcessor(path string) (FileProcessor, error)` | 34-43 | Resuelve por extensión **en minúsculas**. Error `ERR_NO_PROCESSOR` si no hay coincide. |
-| `RegisterProcessor(ext string, processor FileProcessor)` | 46-48 | Registra un procesador. **No normaliza `ext`** (ver gotcha). |
-| `SupportedExtensions() []string` | 51-57 | Devuelve las extensiones registradas. **Orden no determinista** (iteración de map). |
-| `IsSupportedFile(path string) bool` | 60-64 | `true` si la extensión del path está registrada. |
-| `Convert(path, outputPath string) error` | 67-86 | Pipeline completo de conversión de un fichero. |
+| `NewProcessorFactory() *ProcessorFactory` | 46-56 | Crea la factory con losprocessors registrados: `.docx` → `docx.Processor`, `.pdf` → `pdf.Processor`. |
+| `GetProcessor(path string) (FileProcessor, error)` | 59-68 | Resuelve por extensión **en minúsculas**. Error `ERR_NO_PROCESSOR` si no hay coincide. |
+| `RegisterProcessor(ext string, processor FileProcessor)` | 71-73 | Registra un procesador. **No normaliza `ext`** (ver gotcha). |
+| `SupportedExtensions() []string` | 76-82 | Devuelve las extensiones registradas. **Orden no determinista** (iteración de map). |
+| `IsSupportedFile(path string) bool` | 85-89 | `true` si la extensión del path está registrada. |
+| `Convert(path, outputPath string) error` | 102-122 | Pipeline completo de conversión de un fichero. |
 
 ### `GetProcessor`
 
@@ -134,36 +134,55 @@ Reglas:
 
 ## Formatos registrados
 
-| Extensión | Procesador | Fichero | Spec |
+| Extensión | Procesador | Paquete | Spec |
 |---|---|---|---|
-| `.docx` | `DocxProcessor` | `internal/converter/docx_processor.go` | [converters/docx.md](../converters/docx.md) |
-| `.pdf` | `PdfProcessor` | `internal/converter/pdf_processor.go` | [converters/pdf.md](../converters/pdf.md) |
+| `.docx` | `docx.Processor` | `internal/converter/docx/` | [converters/docx.md](../converters/docx.md) |
+| `.pdf` | `pdf.Processor` | `internal/converter/pdf/` | [converters/pdf.md](../converters/pdf.md) |
 
 La lista de formatos soportados es **part del contrato funcional**: la CLI la imprime al usuario
 cuando no encuentra ficheros (`cmd/mdcaster/main.go:118, 135`). Añadir un formato la cambia.
 
+## Un formato, un paquete
+
+Cada formato vive en **su propio paquete**, bajo `internal/converter/`. El paquete raíz no sabe
+nada de los formatos: solo registra sus constructores.
+
+Reglas:
+
+1. Un paquete de formato **no importa** el paquete raíz: la dependencia va en un solo sentido
+   (raíz → formato). Si el formato necesitara algo de la raíz, el contrato estaría en el sitio
+   equivocado.
+2. El paquete de formato **implementa** `FileProcessor` por sus métodos, sin importar la interfaz:
+   Go la satisface de forma implícita.
+3. Las interfaces opcionales (`TextExtractor`, `SkipBeforeHeadingSetter`) se comprueban con una
+   aserción en un test del paquete raíz, que es donde se usan.
+4. La API pública de un paquete de formato es su constructor y su procesador. Todo lo demás es
+   detalle interno.
+
 ## Cómo añadir un formato nuevo
 
 ```go
-// 1. internal/converter/{formato}_processor.go
-package converter
+// 1. internal/converter/{formato}/processor.go
+package {formato}
 
-type {Formato}Processor struct{}
+type Processor struct{}
 
-func New{Formato}Processor() *{Formato}Processor {
-    return &{Formato}Processor{}
+func NewProcessor() *Processor {
+    return &Processor{}
 }
 
-func (fp *{Formato}Processor) Process(inputPath, outputPath string) error {
+func (p *Processor) Process(inputPath, outputPath string) error {
     // ... escribir el .md en outputPath con 0644
     return nil
 }
 
 // 2. internal/converter/processor.go — NewProcessorFactory
-pf.processors[".{ext}"] = New{Formato}Processor()
+import "mdcaster/internal/converter/{formato}"
+...
+pf.processors[".{ext}"] = {formato}.NewProcessor()
 ```
 
-3. Test en `internal/converter/`.
+3. Test en `internal/converter/{formato}/`.
 4. Actualizar `.ai/specs/overview.md` (extensiones soportadas) y crear
    `.ai/specs/converters/{formato}.md`.
 5. Si el formato no puede medirse con `CheckIntegrity`, documentarlo en
@@ -183,6 +202,6 @@ pf.processors[".{ext}"] = New{Formato}Processor()
    error provoca `nil pointer dereference`.
 4. La factory no es segura para escritura concurrente sobre el map. `cmd/mdcaster` lo evita creando
    **una `Converter` por worker** (`cmd/mdcaster/main.go:185`), no comparte la instancia. El motivo
-   principal no es el map, sino que `DocxProcessor` guarda estado entre llamadas: compartir un
+   principal no es el map, sino que `docx.Processor` guarda estado entre llamadas: compartir un
    procesador entre goroutines daría carreras. Ver
    [D2](../../../ARCHITECTURE.md#d2--una-converter-por-worker).

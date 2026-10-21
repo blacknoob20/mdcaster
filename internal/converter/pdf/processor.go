@@ -1,4 +1,4 @@
-package converter
+package pdf
 
 import (
 	"fmt"
@@ -7,16 +7,16 @@ import (
 	"strings"
 )
 
-// PdfProcessor procesa archivos PDF
-type PdfProcessor struct{}
+// Processor procesa archivos PDF
+type Processor struct{}
 
-// NewPdfProcessor crea una nueva instancia del procesador PDF
-func NewPdfProcessor() *PdfProcessor {
-	return &PdfProcessor{}
+// NewProcessor crea una nueva instancia del procesador PDF
+func NewProcessor() *Processor {
+	return &Processor{}
 }
 
 // Process convierte un PDF a Markdown (texto plano)
-func (pp *PdfProcessor) Process(inputPath, outputPath string) error {
+func (pp *Processor) Process(inputPath, outputPath string) error {
 	text, err := pp.extractText(inputPath)
 	if err != nil {
 		return err
@@ -31,7 +31,7 @@ func (pp *PdfProcessor) Process(inputPath, outputPath string) error {
 }
 
 // extractText extrae el texto del PDF usando pdftotext
-func (pp *PdfProcessor) extractText(inputPath string) (string, error) {
+func (pp *Processor) extractText(inputPath string) (string, error) {
 	// Intentar usar `pdftotext` si está disponible
 	cmd := exec.Command("pdftotext", "-layout", inputPath, "-")
 	out, err := cmd.Output()

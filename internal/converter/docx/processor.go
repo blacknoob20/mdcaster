@@ -1,4 +1,4 @@
-package converter
+package docx
 
 import (
 	"archive/zip"
@@ -19,8 +19,8 @@ const (
 	partCoreProps = "docProps/core.xml"
 )
 
-// DocxProcessor procesa archivos DOCX
-type DocxProcessor struct {
+// Processor procesa archivos DOCX
+type Processor struct {
 	// relationships son las relaciones del documento, indexadas por Id.
 	relationships map[string]docxRelationship
 	// Texto plano del último documento procesado. Permite verificar la
@@ -38,15 +38,15 @@ type docxRelationship struct {
 	TargetMode string
 }
 
-// NewDocxProcessor crea una nueva instancia del procesador DOCX
-func NewDocxProcessor() *DocxProcessor {
-	return &DocxProcessor{
+// NewProcessor crea una nueva instancia del procesador DOCX
+func NewProcessor() *Processor {
+	return &Processor{
 		relationships: make(map[string]docxRelationship),
 	}
 }
 
 // Process convierte un DOCX a Markdown
-func (dp *DocxProcessor) Process(inputPath, outputPath string) error {
+func (dp *Processor) Process(inputPath, outputPath string) error {
 	// Reiniciar el estado para cada archivo
 	dp.relationships = make(map[string]docxRelationship)
 	dp.lastText = ""
@@ -140,7 +140,7 @@ func (dp *DocxProcessor) Process(inputPath, outputPath string) error {
 }
 
 // readZipFile lee el contenido de un archivo dentro del ZIP
-func (dp *DocxProcessor) readZipFile(file *zip.File) ([]byte, error) {
+func (dp *Processor) readZipFile(file *zip.File) ([]byte, error) {
 	rc, err := file.Open()
 	if err != nil {
 		return nil, err
@@ -150,14 +150,17 @@ func (dp *DocxProcessor) readZipFile(file *zip.File) ([]byte, error) {
 	return io.ReadAll(rc)
 }
 
-// Relationships almacena las relaciones del documento
-type Relationships struct {
-	XMLName       xml.Name       `xml:"Relationships"`
-	Relationships []Relationship `xml:"Relationship"`
+// relationshipsXML almacena las relaciones del documento.
+//
+// Los nombres de las etiquetas XML son los del propio OOXML: `Relationships`
+// y `Relationship`.
+type relationshipsXML struct {
+	XMLName       xml.Name          `xml:"Relationships"`
+	Relationships []relationshipXML `xml:"Relationship"`
 }
 
-// Relationship una relación individual
-type Relationship struct {
+// relationshipXML una relación individual
+type relationshipXML struct {
 	ID         string `xml:"Id,attr"`
 	Type       string `xml:"Type,attr"`
 	Target     string `xml:"Target,attr"`
@@ -165,8 +168,8 @@ type Relationship struct {
 }
 
 // parseRelationships parsea el archivo de relaciones
-func (dp *DocxProcessor) parseRelationships(content []byte) {
-	var rels Relationships
+func (dp *Processor) parseRelationships(content []byte) {
+	var rels relationshipsXML
 	if err := xml.Unmarshal(content, &rels); err != nil {
 		return
 	}
@@ -183,12 +186,12 @@ func (dp *DocxProcessor) parseRelationships(content []byte) {
 
 // SetSkipBeforeHeading activa o desactiva el descarte del contenido anterior
 // al primer encabezado.
-func (dp *DocxProcessor) SetSkipBeforeHeading(enabled bool) {
+func (dp *Processor) SetSkipBeforeHeading(enabled bool) {
 	dp.skipBeforeHeading = enabled
 }
 
 // ExtractedText devuelve el texto plano del último documento procesado.
-func (dp *DocxProcessor) ExtractedText() string {
+func (dp *Processor) ExtractedText() string {
 	return dp.lastText
 }
 

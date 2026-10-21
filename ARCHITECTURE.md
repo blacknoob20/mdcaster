@@ -34,6 +34,7 @@ una entrada nueva y la anterior **no se reescribe**: el historial forma parte de
 | [D17](#d17--el-dispatcher-se-parte-por-responsabilidad-y-se-elimina-el-código-muerto) | El dispatcher se parte por responsabilidad y se elimina el código muerto | Aceptada |
 | [D18](#d18--el-parser-del-docx-se-parte-por-responsabilidad) | El parser del DOCX se parte por responsabilidad | Aceptada |
 | [D19](#d19--el-render-del-docx-se-parte-por-responsabilidad) | El render del DOCX se parte por responsabilidad | Aceptada |
+| [D20](#d20--cada-formato-vive-en-su-propio-paquete) | Cada formato vive en su propio paquete | Aceptada |
 | [P1](#pendientes) | `ConvertDirectory` puede hacer `panic` | Resuelto por D17 |
 | [P2](#pendientes) | Escaneo no recursivo frente a la API recursiva | Resuelto por D17 |
 | [P3](#pendientes) | Hipervínculos DOCX parseados y no emitidos | Pendiente |
@@ -74,7 +75,7 @@ está en un único punto, `NewProcessorFactory()`.
 
 **Consecuencias.**
 
-- `DocxProcessor` guarda estado entre llamadas (`relationships`, `lastText`). Compartir una
+- `docx.Processor` guarda estado entre llamadas (`relationships`, `lastText`). Compartir una
   instancia entre goroutines daría carreras.
 - El mapa de procesadores de la factory no es seguro para escritura concurrente. Que cada worker
   tenga la suya lo evita sin necesidad de un mutex.
@@ -415,7 +416,7 @@ líneas) formateaba tamaños que nadie formateaba, y `IsDocxFile`, `GetDocxFiles
 
 Además, la verificación de integridad tenía **dos** caminos para obtener el texto original: el que
 reutiliza el del processor y otro que releía el DOCX con un parser propio (`extractDocxContent`, 96
-líneas), duplicando el parseo que ya hace `DocxProcessor`.
+líneas), duplicando el parseo que ya hace `docx.Processor`.
 
 **Decisión.** El dispatcher se parte en dos ficheros **del mismo paquete** y se elimina el código
 muerto:
@@ -460,7 +461,7 @@ integridad de cada fichero, y las rellena ahí.
 
 **Estado:** aceptada
 
-**Contexto.** `internal/converter/docx_parser.go` llegó a 752 líneas con cuatro responsabilidades
+**Contexto.** `internal/converter/docx/parser.go` llegó a 752 líneas con cuatro responsabilidades
 mezcladas: el vocabulario XML (los espacios de nombres y la lectura de atributos), el modelo de
 bloques del documento (D12), el parser en sí y el render en línea de los fragmentos. Encima
 tenía cuatro dependencias cruzadas invertidas: helpers que vivían en un fichero y que otro
@@ -468,10 +469,10 @@ necesitaba.
 
 | Helper | Estaba en | Lo necesitaban |
 |---|---|---|
-| `isWordNamespace` | `docx_parser.go` | el parser y `docx_footnotes.go` |
-| `attrValue` | `docx_parser.go` | el parser y `docx_footnotes.go` |
-| `cleanFormatting` | `docx_processor.go` | el parser y `docx_images.go` |
-| `paragraphPrefix` | `docx_render.go` | el parser y el render |
+| `isWordNamespace` | `parser.go` | el parser y `footnotes.go` |
+| `attrValue` | `parser.go` | el parser y `footnotes.go` |
+| `cleanFormatting` | `processor.go` | el parser y `images.go` |
+| `paragraphPrefix` | `render.go` | el parser y el render |
 
 El caso de `startElement` era el peor: 113 líneas con veinte casos. Es el mismo patrón que
 `processTDR` (194 líneas, nueve etapas) que se partió en D16.
@@ -481,10 +482,10 @@ convierte en un despachador que delega en un método por familia de elementos:
 
 | Fichero | Responsabilidad |
 |---|---|
-| `internal/converter/docx_parser.go` | El parser: el bucle de tokens y los handlers de cada familia de elementos |
-| `internal/converter/docx_model.go` | El modelo de bloques (D12) y `paragraphPrefix` |
-| `internal/converter/docx_spans.go` | El render en línea y `cleanFormatting` |
-| `internal/converter/docx_xml.go` | El vocabulario XML: espacios de nombres y atributos |
+| `internal/converter/docx/parser.go` | El parser: el bucle de tokens y los handlers de cada familia de elementos |
+| `internal/converter/docx/model.go` | El modelo de bloques (D12) y `paragraphPrefix` |
+| `internal/converter/docx/spans.go` | El render en línea y `cleanFormatting` |
+| `internal/converter/docx/xml.go` | El vocabulario XML: espacios de nombres y atributos |
 
 `startElement` queda en 30 líneas y delega en `startParagraphProps`, `startRunProps`, `startText`,
 `startTable`, `startFootnote` y `startImage`. `endElement` aplica el filtro de espacio de nombres
@@ -492,10 +493,10 @@ una sola vez, en vez de en cada caso.
 
 **Consecuencias.**
 
-- El fichero mayor del paquete pasa de 752 a 476 líneas (`docx_parser.go`), y el módulo DOCX queda
+- El fichero mayor del paquete pasa de 752 a 476 líneas (`parser.go`), y el módulo DOCX queda
   repartido en diez ficheros de 43 a 476 líneas.
 - Las cuatro dependencias invertidas desaparecen: cada helper está en el fichero que lo usa su
-  consumidor, y `docx_xml.go` no depende de nada del módulo.
+  consumidor, y `xml.go` no depende de nada del módulo.
 - `cleanMarkdown` deja de compilar su expresión regular en cada llamada: pasa a una variable de
   paquete, como ya se hacía con `emptyBoldAre`. Medido, **18 asignaciones menos por documento**.
 - **Comportamiento idéntico, verificado**: los 75 DOCX del corpus institucional y el PDF del
@@ -515,33 +516,84 @@ responsabilidades:
 
 | Fichero | Líneas | Responsabilidades mezcladas |
 |---|---|---|
-| `docx_render.go` | 450 | el renderer, el render de las listas y el de las tablas |
-| `docx_numbering.go` | 439 | los tipos y el parseo de `numbering.xml`, los contadores y el formato de las etiquetas |
+| `render.go` | 450 | el renderer, el render de las listas y el de las tablas |
+| `numbering.go` | 439 | los tipos y el parseo de `numbering.xml`, los contadores y el formato de las etiquetas |
 
 **Decisión.** Los dos se parten, en el mismo paquete `converter`:
 
 | Fichero | Responsabilidad |
 |---|---|
-| `internal/converter/docx_render.go` | El render del modelo a Markdown: recorre los bloques y escribe el resultado |
-| `internal/converter/docx_lists.go` | El render de las listas: marcador, sangría y los tres modos (Markdown, HTML y literal) |
-| `internal/converter/docx_tables.go` | El render de las tablas: filas, celdas y el escapado de `|` |
-| `internal/converter/docx_numbering.go` | La lectura de `word/numbering.xml`: los tipos y las definiciones de nivel |
-| `internal/converter/docx_numbering_state.go` | Los contadores de las listas: su avance y sus reinicios |
-| `internal/converter/docx_numbering_labels.go` | La etiqueta resuelta y su formato (decimal, letra, romano) |
+| `internal/converter/docx/render.go` | El render del modelo a Markdown: recorre los bloques y escribe el resultado |
+| `internal/converter/docx/lists.go` | El render de las listas: marcador, sangría y los tres modos (Markdown, HTML y literal) |
+| `internal/converter/docx/tables.go` | El render de las tablas: filas, celdas y el escapado de `|` |
+| `internal/converter/docx/numbering.go` | La lectura de `word/numbering.xml`: los tipos y las definiciones de nivel |
+| `internal/converter/docx/numbering_state.go` | Los contadores de las listas: su avance y sus reinicios |
+| `internal/converter/docx/numbering_labels.go` | La etiqueta resuelta y su formato (decimal, letra, romano) |
 
 El corte de la numeración sigue una regla: **el XML en un fichero, el estado en otro y la
-etiqueta en otro**. El render de las listas se queda aparte, en `docx_lists.go`, porque es un
+etiqueta en otro**. El render de las listas se queda aparte, en `lists.go`, porque es un
 problema de Markdown y no de OOXML.
 
 **Consecuencias.**
 
 - El módulo DOCX queda repartido en catorce ficheros. El mayor del paquete sigue siendo
-  `docx_parser.go` (476 líneas); el segundo baja de 450 a 269, y el tercero de 439 a 207.
+  `parser.go` (476 líneas); el segundo baja de 450 a 269, y el tercero de 439 a 207.
 - Las asignaciones por documento no cambian: 144.802-144.808 antes y después. Es lo esperable en
   una reorganización que no toca la lógica.
 - **Comportamiento idéntico, verificado**: los 76 DOCX del corpus institucional y el PDF del
   corpus se convierten **byte a byte igual**, con los mismos 77 pares fichero/porcentaje de
   integridad.
+
+---
+
+### D20 — Cada formato vive en su propio paquete
+
+**Estado:** aceptada
+
+**Contexto.** Tras D17, D18 y D19, los ficheros de `internal/converter` estaban separados por
+responsabilidad, pero todos en **un solo paquete**: la fachada, los contratos, la verificación de
+integridad y los dos formatos. Con 20 ficheros y unas 2.600 líneas, el nombre del paquete ya no
+decía qué contenía, y un formato nuevo se mezclaba con la API pública.
+
+La pregunta era si segmentar por dominios o por subdominios. La respuesta: **dominios** (la
+fachada, la integridad y los formatos), no un subdominio por fichero.
+
+**Decisión.** Cada formato pasa a su propio paquete, bajo `internal/converter/`:
+
+```
+internal/converter/            package converter  — la fachada y los contratos
+internal/converter/docx/       package docx       — el módulo DOCX
+internal/converter/pdf/        package pdf        — el módulo PDF
+```
+
+Reglas:
+
+1. **La dependencia va en un solo sentido**: la raíz registra los constructores de los formatos.
+   Un paquete de formato **no** importa la raíz: si necesitara algo de ella, el contrato estaría
+   en el sitio equivocado.
+2. Las interfaces se satisfacen **de forma implícita**: el paquete de formato implementa
+   `Process`, `ExtractedText` y `SetSkipBeforeHeading` sin nombrar las interfaces del dispatcher.
+3. La **API pública** de un paquete de formato es su constructor y su processor:
+   `docx.NewProcessor()`, `pdf.NewProcessor()`. Los tipos internos conservan sus nombres
+   (`docxParagraph`, `docxTable`): renombrar veinte tipos no mejora el código y ensucia el diff.
+4. Las **interfaces opcionales** se comprueban con una aserción en un test del paquete raíz
+   (`TestDocxProcessorExposesText`): si el processor de DOCX dejara de exponer su texto, la
+   verificación de integridad de los DOCX caería a 0 sin avisar.
+
+**Consecuencias.**
+
+- El paquete raíz queda con cinco ficheros de producción: la fachada, los contratos y la
+  integridad. Los formatos, con sus catorce y un ficheros.
+- Los tests se reparten con el código: el módulo DOCX tiene su suite (`internal/converter/docx/`),
+  el PDF tiene la suya, y el paquete raíz conserva los tests de la fachada y de la integridad. El
+  test que comprueba que el descarte previo no altera la integridad se queda en la raíz, porque
+  necesita la métrica.
+- La garantía de que el texto que el processor expone no pierde nada pasa a estar **en el paquete
+  DOCX** (`TestDocx_ExtractedTextMatchesIndependentRead`): compara los tokens del texto del
+  processor con los de una lectura independiente del original, en vez de comparar porcentajes.
+- **Comportamiento idéntico, verificado**: los 76 DOCX del corpus institucional y el PDF del
+  corpus se convierten **byte a byte igual**, con los mismos 77 pares fichero/porcentaje de
+  integridad. Las asignaciones por documento no cambian: 144.803-144.806 antes y después.
 
 ---
 
@@ -577,7 +629,7 @@ primer nivel: un eventual `--recursive` es una decisión de la CLI, no de la lib
 
 ### P3 — Hipervínculos DOCX parseados y no emitidos
 
-`DocxProcessor` lee `word/_rels/document.xml.rels` y guarda **todas** las relaciones, pero solo
+`docx.Processor` lee `word/_rels/document.xml.rels` y guarda **todas** las relaciones, pero solo
 las usa para localizar las imágenes: los enlaces del cuerpo se pierden.
 
 **Opciones:** emitirlos como enlaces Markdown, o quitar el parseo y aceptar que se pierden.
