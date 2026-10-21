@@ -33,7 +33,7 @@ y poder demostrarlo con un porcentaje de integridad por archivo.
 | **Dispatcher** | `internal/converter/converter.go` | API interna (`Converter`), conversión por archivo, `GetOutputPath` |
 | **Integridad** | `internal/converter/integrity.go` | Porcentaje de contenido conservado: reutiliza el texto que el processor ya extrajo |
 | **Factory** | `internal/converter/processor.go` | Interfaz `FileProcessor`, registro y resolución de procesadores por extensión |
-| **Procesadores** | `internal/converter/docx_processor.go`, `docx_parser.go`, `docx_model.go`, `docx_spans.go`, `docx_xml.go`, `docx_render.go`, `docx_numbering.go`, `docx_footnotes.go`, `docx_frontmatter.go`, `docx_images.go`, `pdf_processor.go` | Conversión específica por formato |
+| **Procesadores** | `internal/converter/docx_processor.go`, `docx_parser.go`, `docx_model.go`, `docx_spans.go`, `docx_xml.go`, `docx_render.go`, `docx_lists.go`, `docx_tables.go`, `docx_numbering.go`, `docx_numbering_state.go`, `docx_numbering_labels.go`, `docx_footnotes.go`, `docx_frontmatter.go`, `docx_images.go`, `pdf_processor.go` | Conversión específica por formato |
 
 Dependencias:
 
@@ -103,13 +103,13 @@ Entrada (.md)
 | Subrayado | `<u>x</u>` (HTML en línea) | `internal/converter/docx_spans.go` |
 | Descarte previo | `--skip-before-heading` empieza en el primer encabezado | `internal/converter/docx_model.go` |
 | Heading por estilo | `Heading1..6` / `Título1..6` → `#`..`######` | `internal/converter/docx_model.go` |
-| Título / Subtítulo | `#` / `##` | `internal/converter/docx_render.go` |
+| Título / Subtítulo | `#` / `##` | `internal/converter/docx_model.go` |
 | Listas | numeración real de `word/numbering.xml`; viñeta `- `, decimal `N. ` | `internal/converter/docx_numbering.go` |
-| Etiquetas no decimales | `<ol type="a" start="N">` (HTML) | `internal/converter/docx_render.go` |
-| Etiquetas compuestas (`2.1.`) | línea literal | `internal/converter/docx_render.go` |
-| Sangría de listas | columna de contenido del marcador del padre | `internal/converter/docx_render.go` |
-| Tablas DOCX | tabla Markdown: primera fila como cabecera | `internal/converter/docx_render.go` |
-| Celdas combinadas | `gridSpan` y `vMerge` dejan las posiciones vacías | `internal/converter/docx_render.go` |
+| Etiquetas no decimales | `<ol type="a" start="N">` (HTML) | `internal/converter/docx_lists.go` |
+| Etiquetas compuestas (`2.1.`) | línea literal | `internal/converter/docx_lists.go` |
+| Sangría de listas | columna de contenido del marcador del padre | `internal/converter/docx_lists.go` |
+| Tablas DOCX | tabla Markdown: primera fila como cabecera | `internal/converter/docx_tables.go` |
+| Celdas combinadas | `gridSpan` y `vMerge` dejan las posiciones vacías | `internal/converter/docx_tables.go` |
 | Frontmatter | `docProps/core.xml` → `author`, `date`, `updated`; solo si hay metadatos | `internal/converter/docx_frontmatter.go` |
 | Notas al pie | `[^id]` en el cuerpo y `[^id]: texto` al final | `internal/converter/docx_footnotes.go` |
 | Imágenes | extraídas a `<nombre>_assets/` y enlazadas | `internal/converter/docx_images.go` |
@@ -228,11 +228,11 @@ entrada en [`ARCHITECTURE.md`](../../ARCHITECTURE.md#pendientes).
 | 3 | `internal/converter/processor.go:57` | `RegisterProcessor` no normaliza la extensión a minúsculas. | Bajo: registrar `.DOCX` crearía una entrada inalcanzable. |
 | 4 | `internal/converter/processor.go:62-69` | `SupportedExtensions()` itera un map → **orden no determinista**. | Bajo: la lista de extensiones que muestra la CLI cambia entre ejecuciones. |
 | 5 | `internal/converter/docx_processor.go` | Las relaciones (hipervínculos) se parsean y guardan, pero **nunca se emiten** al Markdown. | Bajo: los enlaces del DOCX se pierden. |
-| 6 | `internal/converter/docx_render.go` | Los párrafos numerados **dentro de una celda de tabla** no emiten marcador: la celda muestra su texto. | Bajo: las etiquetas de listas dentro de tablas se pierden, también en `docx2md`. |
+| 6 | `internal/converter/docx_tables.go` | Los párrafos numerados **dentro de una celda de tabla** no emiten marcador: la celda muestra su texto. | Bajo: las etiquetas de listas dentro de tablas se pierden, también en `docx2md`. |
 | 7 | `cmd/mdcaster/main.go:318-321` | "Speedup por concurrencia" se calcula como `suma(tiempos) / tiempoTotal`, es decir **eficiencia de paralelismo**, no speedup. Con 1 worker da ~1.0x. | Bajo: etiqueta engañosa en el reporte. |
 | 8 | `cmd/mdcaster/main.go:100-114` | El escaneo de carpetas no es recursivo: los ficheros en subcarpetas se ignoran en silencio. | Medio: los ficheros en subcarpetas no se convierten. |
-| 9 | `internal/converter/docx_render.go` | Las etiquetas de lista no decimales se emiten como HTML (`<ol type="a">`), donde Markdown no se procesa. | Bajo: el contenido del `<li>` se emite con HTML en línea, no con `**` y `*`. |
-| 10 | `internal/converter/docx_render.go` | Las celdas combinadas (`gridSpan`, `vMerge`) se aplanan a celdas vacías: Markdown no tiene celdas combinadas. | Bajo: la estructura de la tabla se simplifica, el texto no se pierde. |
+| 9 | `internal/converter/docx_lists.go` | Las etiquetas de lista no decimales se emiten como HTML (`<ol type="a">`), donde Markdown no se procesa. | Bajo: el contenido del `<li>` se emite con HTML en línea, no con `**` y `*`. |
+| 10 | `internal/converter/docx_tables.go` | Las celdas combinadas (`gridSpan`, `vMerge`) se aplanan a celdas vacías: Markdown no tiene celdas combinadas. | Bajo: la estructura de la tabla se simplifica, el texto no se pierde. |
 
 ## Índice de referencias
 

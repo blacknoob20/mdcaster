@@ -33,6 +33,7 @@ una entrada nueva y la anterior **no se reescribe**: el historial forma parte de
 | [D16](#d16--mdclean-se-parte-por-responsabilidad) | `mdclean` se parte por responsabilidad | Aceptada |
 | [D17](#d17--el-dispatcher-se-parte-por-responsabilidad-y-se-elimina-el-código-muerto) | El dispatcher se parte por responsabilidad y se elimina el código muerto | Aceptada |
 | [D18](#d18--el-parser-del-docx-se-parte-por-responsabilidad) | El parser del DOCX se parte por responsabilidad | Aceptada |
+| [D19](#d19--el-render-del-docx-se-parte-por-responsabilidad) | El render del DOCX se parte por responsabilidad | Aceptada |
 | [P1](#pendientes) | `ConvertDirectory` puede hacer `panic` | Resuelto por D17 |
 | [P2](#pendientes) | Escaneo no recursivo frente a la API recursiva | Resuelto por D17 |
 | [P3](#pendientes) | Hipervínculos DOCX parseados y no emitidos | Pendiente |
@@ -502,6 +503,45 @@ una sola vez, en vez de en cada caso.
   integridad.
 - El tiempo de conversión se mantiene en el mismo rango (33-52 ms antes, 31-36 ms después), con
   el ruido de la máquina (±40 %) ya aceptado en D16.
+
+---
+
+### D19 — El render del DOCX se parte por responsabilidad
+
+**Estado:** aceptada
+
+**Contexto.** Tras D18 quedaban dos ficheros grandes en el módulo DOCX, y los dos mezclaban tres
+responsabilidades:
+
+| Fichero | Líneas | Responsabilidades mezcladas |
+|---|---|---|
+| `docx_render.go` | 450 | el renderer, el render de las listas y el de las tablas |
+| `docx_numbering.go` | 439 | los tipos y el parseo de `numbering.xml`, los contadores y el formato de las etiquetas |
+
+**Decisión.** Los dos se parten, en el mismo paquete `converter`:
+
+| Fichero | Responsabilidad |
+|---|---|
+| `internal/converter/docx_render.go` | El render del modelo a Markdown: recorre los bloques y escribe el resultado |
+| `internal/converter/docx_lists.go` | El render de las listas: marcador, sangría y los tres modos (Markdown, HTML y literal) |
+| `internal/converter/docx_tables.go` | El render de las tablas: filas, celdas y el escapado de `|` |
+| `internal/converter/docx_numbering.go` | La lectura de `word/numbering.xml`: los tipos y las definiciones de nivel |
+| `internal/converter/docx_numbering_state.go` | Los contadores de las listas: su avance y sus reinicios |
+| `internal/converter/docx_numbering_labels.go` | La etiqueta resuelta y su formato (decimal, letra, romano) |
+
+El corte de la numeración sigue una regla: **el XML en un fichero, el estado en otro y la
+etiqueta en otro**. El render de las listas se queda aparte, en `docx_lists.go`, porque es un
+problema de Markdown y no de OOXML.
+
+**Consecuencias.**
+
+- El módulo DOCX queda repartido en catorce ficheros. El mayor del paquete sigue siendo
+  `docx_parser.go` (476 líneas); el segundo baja de 450 a 269, y el tercero de 439 a 207.
+- Las asignaciones por documento no cambian: 144.802-144.808 antes y después. Es lo esperable en
+  una reorganización que no toca la lógica.
+- **Comportamiento idéntico, verificado**: los 76 DOCX del corpus institucional y el PDF del
+  corpus se convierten **byte a byte igual**, con los mismos 77 pares fichero/porcentaje de
+  integridad.
 
 ---
 
