@@ -33,7 +33,7 @@ y poder demostrarlo con un porcentaje de integridad por archivo.
 | **Dispatcher** | `internal/converter/converter.go` | API interna (`Converter`), conversión por archivo, `GetOutputPath` |
 | **Integridad** | `internal/converter/integrity.go` | Porcentaje de contenido conservado: reutiliza el texto que el processor ya extrajo |
 | **Factory** | `internal/converter/processor.go` | Interfaz `FileProcessor`, registro y resolución de procesadores por extensión |
-| **Procesadores** | `internal/converter/docx_processor.go`, `docx_parser.go`, `docx_render.go`, `docx_numbering.go`, `docx_footnotes.go`, `docx_frontmatter.go`, `docx_images.go`, `pdf_processor.go` | Conversión específica por formato |
+| **Procesadores** | `internal/converter/docx_processor.go`, `docx_parser.go`, `docx_model.go`, `docx_spans.go`, `docx_xml.go`, `docx_render.go`, `docx_numbering.go`, `docx_footnotes.go`, `docx_frontmatter.go`, `docx_images.go`, `pdf_processor.go` | Conversión específica por formato |
 
 Dependencias:
 
@@ -99,10 +99,10 @@ Entrada (.md)
 | Umbral 🟠 | `>= 50` | `cmd/mdcaster/main.go:254` |
 | Umbral 🔴 | `< 50` | `cmd/mdcaster/main.go:256` |
 | Línea de texto DOCX | 2 espacios por `w:tab`, `\n` por `w:br` | `internal/converter/docx_parser.go` |
-| Negrita / cursiva / tachado | `**x**`, `*x*`, `~~x~~` | `internal/converter/docx_parser.go` |
-| Subrayado | `<u>x</u>` (HTML en línea) | `internal/converter/docx_parser.go` |
-| Descarte previo | `--skip-before-heading` empieza en el primer encabezado | `internal/converter/docx_parser.go` |
-| Heading por estilo | `Heading1..6` / `Título1..6` → `#`..`######` | `internal/converter/docx_render.go` |
+| Negrita / cursiva / tachado | `**x**`, `*x*`, `~~x~~` | `internal/converter/docx_spans.go` |
+| Subrayado | `<u>x</u>` (HTML en línea) | `internal/converter/docx_spans.go` |
+| Descarte previo | `--skip-before-heading` empieza en el primer encabezado | `internal/converter/docx_model.go` |
+| Heading por estilo | `Heading1..6` / `Título1..6` → `#`..`######` | `internal/converter/docx_model.go` |
 | Título / Subtítulo | `#` / `##` | `internal/converter/docx_render.go` |
 | Listas | numeración real de `word/numbering.xml`; viñeta `- `, decimal `N. ` | `internal/converter/docx_numbering.go` |
 | Etiquetas no decimales | `<ol type="a" start="N">` (HTML) | `internal/converter/docx_render.go` |

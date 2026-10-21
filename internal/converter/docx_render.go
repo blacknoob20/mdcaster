@@ -447,33 +447,3 @@ func htmlListType(format string) string {
 		return "a"
 	}
 }
-
-// paragraphPrefix devuelve el prefijo de encabezado que corresponde al
-// estilo del párrafo, o la cadena vacía si no es un título.
-//
-// La detección es por subcadena del nombre del estilo, no por igualdad: los
-// nombres dependen del idioma de Word ("Heading1", "Título1", "Ttulo1").
-func paragraphPrefix(style string) string {
-	styleLower := strings.ToLower(style)
-
-	switch {
-	case strings.Contains(styleLower, "heading1") || strings.Contains(styleLower, "título1") || strings.Contains(styleLower, "ttulo1"):
-		return "# "
-	case strings.Contains(styleLower, "heading2") || strings.Contains(styleLower, "título2") || strings.Contains(styleLower, "ttulo2"):
-		return "## "
-	case strings.Contains(styleLower, "heading3") || strings.Contains(styleLower, "título3") || strings.Contains(styleLower, "ttulo3"):
-		return "### "
-	case strings.Contains(styleLower, "heading4") || strings.Contains(styleLower, "título4") || strings.Contains(styleLower, "ttulo4"):
-		return "#### "
-	case strings.Contains(styleLower, "heading5") || strings.Contains(styleLower, "título5") || strings.Contains(styleLower, "ttulo5"):
-		return "##### "
-	case strings.Contains(styleLower, "heading6") || strings.Contains(styleLower, "título6") || strings.Contains(styleLower, "ttulo6"):
-		return "###### "
-	case strings.Contains(styleLower, "title") || styleLower == "título" || styleLower == "ttulo":
-		return "# "
-	case strings.Contains(styleLower, "subtitle"):
-		return "## "
-	}
-
-	return ""
-}

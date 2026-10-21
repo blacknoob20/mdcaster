@@ -32,6 +32,7 @@ una entrada nueva y la anterior **no se reescribe**: el historial forma parte de
 | [D15](#d15--el-descarte-inicial-es-una-opción-del-processor) | El descarte inicial es una opción del processor | Aceptada |
 | [D16](#d16--mdclean-se-parte-por-responsabilidad) | `mdclean` se parte por responsabilidad | Aceptada |
 | [D17](#d17--el-dispatcher-se-parte-por-responsabilidad-y-se-elimina-el-código-muerto) | El dispatcher se parte por responsabilidad y se elimina el código muerto | Aceptada |
+| [D18](#d18--el-parser-del-docx-se-parte-por-responsabilidad) | El parser del DOCX se parte por responsabilidad | Aceptada |
 | [P1](#pendientes) | `ConvertDirectory` puede hacer `panic` | Resuelto por D17 |
 | [P2](#pendientes) | Escaneo no recursivo frente a la API recursiva | Resuelto por D17 |
 | [P3](#pendientes) | Hipervínculos DOCX parseados y no emitidos | Pendiente |
@@ -451,6 +452,56 @@ integridad de cada fichero, y las rellena ahí.
   independiente (`TestIntegrity_ReusedTextMatchesIndependentRead`) y compara las dos cifras: sobre
   el corpus dan 99,4075 % las dos.
 - P1 y P2 quedan resueltos: el método que podía hacer `panic` y el que no se usaba ya no existen.
+
+---
+
+### D18 — El parser del DOCX se parte por responsabilidad
+
+**Estado:** aceptada
+
+**Contexto.** `internal/converter/docx_parser.go` llegó a 752 líneas con cuatro responsabilidades
+mezcladas: el vocabulario XML (los espacios de nombres y la lectura de atributos), el modelo de
+bloques del documento (D12), el parser en sí y el render en línea de los fragmentos. Encima
+tenía cuatro dependencias cruzadas invertidas: helpers que vivían en un fichero y que otro
+necesitaba.
+
+| Helper | Estaba en | Lo necesitaban |
+|---|---|---|
+| `isWordNamespace` | `docx_parser.go` | el parser y `docx_footnotes.go` |
+| `attrValue` | `docx_parser.go` | el parser y `docx_footnotes.go` |
+| `cleanFormatting` | `docx_processor.go` | el parser y `docx_images.go` |
+| `paragraphPrefix` | `docx_render.go` | el parser y el render |
+
+El caso de `startElement` era el peor: 113 líneas con veinte casos. Es el mismo patrón que
+`processTDR` (194 líneas, nueve etapas) que se partió en D16.
+
+**Decisión.** El parser se parte en cuatro ficheros **del mismo paquete**, y `startElement` se
+convierte en un despachador que delega en un método por familia de elementos:
+
+| Fichero | Responsabilidad |
+|---|---|
+| `internal/converter/docx_parser.go` | El parser: el bucle de tokens y los handlers de cada familia de elementos |
+| `internal/converter/docx_model.go` | El modelo de bloques (D12) y `paragraphPrefix` |
+| `internal/converter/docx_spans.go` | El render en línea y `cleanFormatting` |
+| `internal/converter/docx_xml.go` | El vocabulario XML: espacios de nombres y atributos |
+
+`startElement` queda en 30 líneas y delega en `startParagraphProps`, `startRunProps`, `startText`,
+`startTable`, `startFootnote` y `startImage`. `endElement` aplica el filtro de espacio de nombres
+una sola vez, en vez de en cada caso.
+
+**Consecuencias.**
+
+- El fichero mayor del paquete pasa de 752 a 476 líneas (`docx_parser.go`), y el módulo DOCX queda
+  repartido en diez ficheros de 43 a 476 líneas.
+- Las cuatro dependencias invertidas desaparecen: cada helper está en el fichero que lo usa su
+  consumidor, y `docx_xml.go` no depende de nada del módulo.
+- `cleanMarkdown` deja de compilar su expresión regular en cada llamada: pasa a una variable de
+  paquete, como ya se hacía con `emptyBoldAre`. Medido, **18 asignaciones menos por documento**.
+- **Comportamiento idéntico, verificado**: los 75 DOCX del corpus institucional y el PDF del
+  corpus se convierten **byte a byte igual**, con los mismos 76 pares fichero/porcentaje de
+  integridad.
+- El tiempo de conversión se mantiene en el mismo rango (33-52 ms antes, 31-36 ms después), con
+  el ruido de la máquina (±40 %) ya aceptado en D16.
 
 ---
 

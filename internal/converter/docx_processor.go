@@ -192,23 +192,14 @@ func (dp *DocxProcessor) ExtractedText() string {
 	return dp.lastText
 }
 
-// emptyBoldAre detecta marcas de negrita vacías. Se compila una sola vez:
-// cleanFormatting se llama por cada párrafo del documento.
-var emptyBoldAre = regexp.MustCompile(`\*\*\s*\*\*`)
-
-// cleanFormatting limpia el formato duplicado
-func cleanFormatting(content string) string {
-	// Limpiar ** vacíos
-	content = emptyBoldAre.ReplaceAllString(content, "")
-
-	return content
-}
+// blankLinesAre detecta tres o más saltos de línea seguidos. Se compila una
+// sola vez: cleanMarkdown se llama por cada documento convertido.
+var blankLinesAre = regexp.MustCompile(`\n{3,}`)
 
 // cleanMarkdown limpia el Markdown resultante
 func cleanMarkdown(content string) string {
 	// Eliminar múltiples líneas en blanco consecutivas
-	re := regexp.MustCompile(`\n{3,}`)
-	content = re.ReplaceAllString(content, "\n\n")
+	content = blankLinesAre.ReplaceAllString(content, "\n\n")
 
 	// Eliminar espacios al final de las líneas
 	lines := strings.Split(content, "\n")

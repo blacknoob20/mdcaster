@@ -17,6 +17,7 @@
 | 4 — Fidelidad DOCX | en curso | Tablas, numeración real, frontmatter, notas al pie e imágenes (D12, D13) |
 | 5 — Cierre de huecos | completada | Subrayado como HTML en línea (D14) y descarte previo (D15) |
 | 6 — Partición por responsabilidad | completada | `mdclean` en cinco ficheros (D16) y el dispatcher en dos, con el código muerto eliminado (D17) |
+| 7 — Partición del parser DOCX | completada | El parser del DOCX en cuatro ficheros y `startElement` descompuesta por familia de elementos (D18) |
 
 Verificación final de la fase 0-3: `gofmt` limpio, `go vet` limpio, `go test ./...` en verde,
 compila para linux, darwin y windows (amd64), 52 enlaces markdown y 111 referencias de código
@@ -52,6 +53,7 @@ contenido, misma estructura y la numeración real que muestra Word.
 | D15 | El descarte antes del primer encabezado es una opción del processor, no de la CLI | Aceptada |
 | D16 | `mdclean` se parte en cinco ficheros por responsabilidad y se deduplica | Aceptada |
 | D17 | El dispatcher se parte en dos ficheros por responsabilidad y se elimina el código muerto | Aceptada |
+| D18 | El parser del DOCX se parte en cuatro ficheros por responsabilidad | Aceptada |
 
 ### Pendientes
 

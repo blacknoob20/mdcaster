@@ -1,8 +1,9 @@
 # SPEC — Conversión DOCX → Markdown
 
 **Módulo:** `converters/docx`
-**Código:** `internal/converter/docx_processor.go`, `docx_parser.go`, `docx_render.go`,
-`docx_numbering.go`, `docx_footnotes.go`, `docx_frontmatter.go`, `docx_images.go`
+**Código:** `internal/converter/docx_processor.go`, `docx_parser.go`, `docx_model.go`,
+`docx_spans.go`, `docx_xml.go`, `docx_render.go`, `docx_numbering.go`, `docx_footnotes.go`,
+`docx_frontmatter.go`, `docx_images.go`
 **Implementa:** `converter.FileProcessor` y `converter.TextExtractor`
 **Dependencias:** solo biblioteca estándar (`archive/zip`, `encoding/xml`, `regexp`, `strconv`)
 
@@ -13,6 +14,32 @@
 Convertir un `.docx` (paquete OOXML = ZIP con XML) a Markdown preservando la estructura del
 documento: párrafos, estilos de título, énfasis, listas con su numeración real, tablas, notas al
 pie, imágenes y metadatos.
+
+## Estructura de los ficheros
+
+El módulo se reparte por responsabilidad, en el mismo paquete:
+
+| Fichero | Responsabilidad |
+|---|---|
+| `docx_processor.go` | El pipeline `Process`: abre el ZIP, lee las partes, parsea, renderiza y escribe |
+| `docx_parser.go` | El parser: recorre los tokens de `word/document.xml` y construye el modelo |
+| `docx_model.go` | El modelo de bloques: párrafos, celdas, tablas, imágenes y `paragraphPrefix` |
+| `docx_spans.go` | El render en línea: fragmentos a Markdown y a HTML, y `cleanFormatting` |
+| `docx_xml.go` | El vocabulario XML: espacios de nombres y lectura de atributos |
+| `docx_render.go` | El render del modelo: bloques, listas y tablas a Markdown |
+| `docx_numbering.go` | La numeración real de las listas, resuelta contra `word/numbering.xml` |
+| `docx_footnotes.go` | Las notas al pie: lectura de `word/footnotes.xml` y sus definiciones |
+| `docx_frontmatter.go` | Los metadatos de `docProps/core.xml` y el frontmatter |
+| `docx_images.go` | La extracción de las imágenes y su enlace en el Markdown |
+
+Reglas de reparto:
+
+1. `docx_xml.go` no depende de nada del módulo: es el vocabulario que comparten el parser, las
+   notas al pie y la numeración.
+2. `docx_model.go` no depende del parser: el parser construye el modelo, no al revés.
+3. `paragraphPrefix` vive en el modelo porque lo usan el parser (para saber si un párrafo es un
+   encabezado) y el render (para emitirlo).
+4. `cleanFormatting` vive junto al render en línea porque limpia las marcas que este produce.
 
 ## Entrada / salida
 
