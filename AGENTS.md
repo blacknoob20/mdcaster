@@ -15,7 +15,7 @@ Proyecto Go 1.21: CLI `mdcaster` y `mdclean` sobre la librería `internal/conver
 
 ## Rendimiento
 
-- Mide antes y después: `go test ./... -bench . -benchmem`. Nada se optimiza a ciegas.
+- Mide antes y después con el benchmark en Docker (ver «Verificación»). Nada se optimiza a ciegas.
 - Las expresiones regulares se compilan **una vez**, al inicio del paquete. Nunca dentro de
   una función que se llame por línea o por párrafo.
 - Acumula párrafos con `strings.Builder`, no con `+`.
@@ -29,15 +29,28 @@ Proyecto Go 1.21: CLI `mdcaster` y `mdclean` sobre la librería `internal/conver
 
 ## Verificación
 
-- `go vet ./...` y `go test ./...` antes de commitear.
-- Si `go` no está instalado, dilo explícitamente. No afirmes que los tests pasan.
+- **Go no está instalado en el host**: todo se compila y se prueba en **Docker**, con la imagen
+  `golang-mdcaster:1.21`. No instales Go en el host para verificar.
+- Usa este prefijo (el repo va montado en `/app`):
+
+  ```bash
+  DOCKER="docker run --rm --user $(id -u):$(id -g) -w /app -e HOME=/tmp -v $PWD:/app golang-mdcaster:1.21"
+  ```
+
+  `-w /app` es obligatorio: la imagen arranca en `WORKDIR=/go` y sin él no encuentra el `go.mod`.
+  `HOME=/tmp` también: sin él el cache de build apunta a `/.cache/go-build` y falla con
+  "permission denied".
+- Antes de commitear: `$DOCKER go vet ./...`, `$DOCKER go test ./...` y `$DOCKER gofmt -l .`
+  (sin salida = formateado).
+- Benchmarks: `$DOCKER go test ./... -bench . -benchmem`.
+- Si **Docker tampoco** está disponible, dilo explícitamente. No afirmes que los tests pasan.
 - Todo cambio de código lleva test nuevo o actualizado.
 - El corpus (`word/`, `pdf/`) es local y **no se versiona**: los tests se omiten si no está.
   No copies ficheros al repositorio.
 
 ## Estilo
 
-- `gofmt` antes de commitear.
+- `gofmt` antes de commitear, en Docker (ver «Verificación»).
 - Conventional commits con scope, en español: `tipo(scope): descripción`.
   - El tipo va en inglés: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`.
   - El scope es el **dominio**, no el fichero: `mdclean`, `converter`, `color`, `specs`.

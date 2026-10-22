@@ -55,6 +55,34 @@ go install ./cmd/mdcaster
 go install ./cmd/mdclean
 ```
 
+#### Sin Go instalado: compilar con Docker
+
+Si no tienes Go en la máquina, usa la imagen oficial `golang:1.21`. El proyecto va montado en
+`/app` y el binario sale en `./bin` (ya está en `.gitignore`):
+
+```bash
+# Compilar el conversor
+docker run --rm --user $(id -u):$(id -g) -w /app -e HOME=/tmp \
+  -v "$PWD:/app" golang:1.21 \
+  go build -buildvcs=false -o /app/bin/mdcaster ./cmd/mdcaster
+
+# Compilar el cleaner
+docker run --rm --user $(id -u):$(id -g) -w /app -e HOME=/tmp \
+  -v "$PWD:/app" golang:1.21 \
+  go build -buildvcs=false -o /app/bin/mdclean ./cmd/mdclean
+```
+
+> `-w /app` es obligatorio (la imagen arranca en `/go`) y `HOME=/tmp` también (sin él el cache de
+> build no es escribible).
+
+Para instalarlo en el `PATH` en vez de en `./bin`, monta el destino:
+
+```bash
+docker run --rm --user $(id -u):$(id -g) -w /app -e HOME=/tmp \
+  -v "$PWD:/app" -v "$HOME/.local/bin:/dest" golang:1.21 \
+  go build -buildvcs=false -trimpath -ldflags "-s -w" -o /dest/mdcaster ./cmd/mdcaster
+```
+
 ## 🚀 Uso
 
 ### Uso Básico
