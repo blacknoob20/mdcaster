@@ -12,4 +12,4 @@ package version
 // Solo se edita este valor al publicar una release. Ningún otro fichero
 // copia el número: las specs y el README lo describen de forma genérica
 // para que no envejezcan en cada release.
-const Version = "1.0.0"
+const Version = "1.1.0"
