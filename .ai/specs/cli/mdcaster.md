@@ -24,6 +24,15 @@ mostrar progreso por fichero y un resumen final con métricas de rendimiento e i
 | `--version` | — | bool | `false` | Mostrar versión |
 | `--help` | — | bool | `false` | Mostrar ayuda |
 
+### Versión — `internal/version/version.go`
+
+El número que imprime `--version` sale de `internal/version.Version`, la **única fuente de
+verdad** del SemVer del proyecto. Ningún otro fichero lo copia: esta spec, el README y el mensaje
+del tag lo describen de forma genérica, para que no envejezcan en cada release.
+
+La publica el agente al cerrar una release. La política está en `ARCHITECTURE.md` (D21) y el
+procedimiento en `AGENTS.md`.
+
 ### Resolución de flags — `cmd/mdcaster/main.go:55-69`
 
 Precedencia **normativa**:
@@ -48,7 +57,7 @@ posicional → `ERR_MDC_INPUT_MISSING`, se imprime el usage y se sale con **cód
 ```
 1. flag.Parse()
 2. Imprimir el banner SIEMPRE (línea 52) — incluso con --version y --help
-3. --version  → imprimir "Versión: 1.0.0" → exit 0
+3. --version  → imprimir "Versión: " + version.Version → exit 0
 4. --help     → printHelp()                   → exit 0
 5. Resolver flags (largo > corto)
 6. Resolver input: flag largo → flag corto → flag.Arg(0)

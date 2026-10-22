@@ -1,9 +1,24 @@
 package main
 
 import (
+	"bytes"
 	"strings"
 	"testing"
+
+	"mdcaster/internal/version"
 )
+
+// TestPrintVersion_UsesSharedVersion comprueba que el flag --version publica
+// el número de internal/version, la fuente única de verdad.
+func TestPrintVersion_UsesSharedVersion(t *testing.T) {
+	var buf bytes.Buffer
+	printVersion(&buf)
+
+	want := "Versión: " + version.Version + "\n"
+	if buf.String() != want {
+		t.Errorf("printVersion = %q; se esperaba %q", buf.String(), want)
+	}
+}
 
 // TestSplitFrontmatter_KeepsBlockIntact comprueba que el frontmatter YAML se
 // aparta del cuerpo y se devuelve tal cual.

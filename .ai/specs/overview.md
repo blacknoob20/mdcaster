@@ -121,8 +121,9 @@ Entrada (.md)
 | Acumulación de párrafos | con `strings.Builder`, no con `+` | `cmd/mdclean/generic.go:45-64`, `cmd/mdclean/tdr.go:300-328` |
 | `mdclean` sin `--tdr` | une líneas "envueltas" | `cmd/mdclean/generic.go:45-64` |
 | `mdclean` con `--tdr` | 9 etapas de normalización (7 pasadas y 2 sub-pasos) | `cmd/mdclean/tdr.go:26-39` |
-| Escritura `mdclean` | con salto de línea final garantizado | `cmd/mdclean/main.go:110-134` |
+| Escritura `mdclean` | con salto de línea final garantizado | `cmd/mdclean/main.go:128-152` |
 | Color de la salida | códigos ANSI de la stdlib; se desactiva sin terminal, con `NO_COLOR` o `TERM=dumb` | `cmd/mdcaster/ansi.go:24-51` |
+| Versión del proyecto | SemVer en `internal/version.Version`: **fuente única de verdad** para los dos binarios | `internal/version/version.go:15` |
 
 ## Taxonomía de errores
 
@@ -144,15 +145,15 @@ Entrada (.md)
 | `ERR_MDC_PATH_NOT_FOUND` | `cmd/mdcaster/main.go:87` | `❌ Error: La ruta '%s' no existe` → **exit 1** |
 | `ERR_MDC_UNSUPPORTED_TYPE` | `cmd/mdcaster/main.go:123` | `❌ Error: El archivo '%s' no es de un tipo soportado` → **exit 1** |
 | `ERR_MDC_NO_SUPPORTED_FILES` | `cmd/mdcaster/main.go:117` | `⚠️  No se encontraron archivos soportados en la carpeta` → **exit 0** |
-| `ERR_MDC_USAGE` | `cmd/mdclean/main.go:43-47` | usage en stderr → **exit 2** |
-| `ERR_MDCLEAN_OPEN` / `ERR_MDCLEAN_READ` / `ERR_MDCLEAN_WRITE` | `cmd/mdclean/main.go:49-52, 57-60, 67-84, 88-90` | mensaje en stderr → **exit 1** |
+| `ERR_MDC_USAGE` | `cmd/mdclean/main.go:43-46` | usage en stderr → **exit 2** |
+| `ERR_MDCLEAN_OPEN` / `ERR_MDCLEAN_READ` / `ERR_MDCLEAN_WRITE` | `cmd/mdclean/main.go:49-53, 56-60, 78-92, 95-98` | mensaje en stderr → **exit 1** |
 
 Códigos de salida:
 
 | Binario | 0 | 1 | 2 |
 |---|---|---|---|
 | `mdcaster` | éxito, `--help`, `--version`, carpeta sin ficheros soportados | cualquier error de entrada o conversión | — |
-| `mdclean` | éxito | error de apertura/lectura/escritura | número de argumentos incorrecto |
+| `mdclean` | éxito, `--version` | error de apertura/lectura/escritura | número de argumentos incorrecto |
 
 ## Modelo de datos
 

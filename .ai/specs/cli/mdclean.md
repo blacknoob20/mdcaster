@@ -15,16 +15,27 @@ PDF.
 
 ## Flags
 
-`cmd/mdclean/main.go:21-24`
+`cmd/mdclean/main.go:23-26`
 
 | Flag | Tipo | Default | Descripción |
 |---|---|---|---|
 | `--inplace` | bool | `false` | Reescribe el fichero de entrada en el sitio |
 | `--tdr` | bool | `false` | Modo TDR: limpieza/formatado de Markdown exportado de DOCX/PDF |
+| `--version` | bool | `false` | Mostrar versión |
+
+### Versión — `internal/version/version.go`
+
+`--version` imprime `"Versión: " + version.Version` y sale con código **0**. El número sale de
+`internal/version.Version`, la única fuente de verdad del SemVer del proyecto, la misma que usa
+`mdcaster`. La publica el agente al cerrar una release (`ARCHITECTURE.md` D21).
+
+`--version` se comprueba **después** de `flag.Parse()` y **antes** del recuento de argumentos: no
+hace falta fichero de entrada para consultar la versión. Por eso `mdclean --version` sale con 0 y
+no con el 2 del usage.
 
 ### Argumento posicional
 
-Se exige **exactamente un** argumento: la ruta del `.md` a limpiar (`cmd/mdclean/main.go:43-47`).
+Se exige **exactamente un** argumento: la ruta del `.md` a limpiar (`cmd/mdclean/main.go:43-46`).
 
 | Situación | Comportamiento | Código de salida |
 |---|---|---|
@@ -40,26 +51,27 @@ Uso: mdclean [--inplace] <archivo.md>
 
 (El nombre del binario se toma de `os.Args[0]`, línea 36.)
 
-## Flujo de `main` — `cmd/mdclean/main.go:26-90`
+## Flujo de `main` — `cmd/mdclean/main.go:29-99`
 
 ```
 1. flag.Usage = <custom>   → "Uso: <bin> [--inplace] <archivo.md>" + PrintDefaults
 2. flag.Parse()
-3. Si flag.NArg() != 1 → usage → exit 2
-4. os.Open(path)            → error → stderr → exit 1
-5. readAllLines(f)          → error → stderr → exit 1
-6. splitFrontmatter(lines)  → (frontmatter, body)
-7. clean = processTDR(body)  si --tdr
+3. Si --version → printVersion(os.Stdout) → exit 0
+4. Si flag.NArg() != 1 → usage → exit 2
+5. os.Open(path)            → error → stderr → exit 1
+6. readAllLines(f)          → error → stderr → exit 1
+7. splitFrontmatter(lines)  → (frontmatter, body)
+8. clean = processTDR(body)  si --tdr
    clean = process(body)     si no
-8. clean = append(frontmatter, clean...)
-9. Si --inplace:
+9. clean = append(frontmatter, clean...)
+10. Si --inplace:
       os.Create(path)  ← TRUNCA el fichero
       writeLines(f, clean)
    Si no:
       writeLines(os.Stdout, clean)
 ```
 
-### `splitFrontmatter` — `cmd/mdclean/main.go:136-149`
+### `splitFrontmatter` — `cmd/mdclean/main.go:154-167`
 
 El bloque de frontmatter YAML se aparta **antes** de limpiar: son metadatos, no texto, y unirlo
 con el cuerpo lo destrozaría.
@@ -224,20 +236,28 @@ El separador lo decide `joinerBetweenTDR` (`cmd/mdclean/tdr.go:420-444`): espaci
 3. Colapsa espacios (excepto en imágenes).
 4. Vuelve a colapsar las líneas en blanco consecutivas.
 
+## Versión
+
+### `printVersion` — `cmd/mdclean/main.go:105-107`
+
+Escribe en `w` la línea `"Versión: " + version.Version` y un salto de línea. El número sale de
+`internal/version.Version` (`internal/version/version.go`), la única fuente de verdad del SemVer
+del proyecto: la comparte con `mdcaster` y es la que publica el tag de la release.
+
 ## Lectura y escritura
 
-### `readAllLines` — `cmd/mdclean/main.go:92-108`
+### `readAllLines` — `cmd/mdclean/main.go:110-126`
 
 Usa `bufio.Scanner` con buffer inicial de 64 KiB y **máximo de 4 MiB** por línea. Las líneas más
 largas que eso provocan error.
 
-### `writeLines` — `cmd/mdclean/main.go:110-134`
+### `writeLines` — `cmd/mdclean/main.go:128-152`
 
 1. Escribe cada línea separada por `\n`.
 2. **Siempre** añade un `\n` final, incluso con fichero vacío (en ese caso escribe solo el `\n`).
 3. Usa un `bufio.Writer` y hace `Flush` al final.
 
-### Modo `--inplace` — `cmd/mdclean/main.go:64-85`
+### Modo `--inplace` — `cmd/mdclean/main.go:75-93`
 
 ```
 os.Create(path)   ← TRUNCA el fichero de entrada

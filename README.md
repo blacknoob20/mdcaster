@@ -182,8 +182,10 @@ generado. Cada archivo muestra su porcentaje durante la conversión, y al final 
 |------|-------------|
 | `--inplace` | Reescribe el archivo de entrada en el sitio (en vez de imprimir por stdout) |
 | `--tdr` | Modo TDR: normaliza encabezados, índices, viñetas, cabeceras repetidas y números de página |
+| `--version` | Mostrar versión |
 
 `mdclean` exige **exactamente un** argumento: la ruta del `.md` a limpiar.
+(`--version` es la excepción: imprime la versión y sale, sin necesidad de fichero.)
 
 > `--inplace` no es atómico: trunca y reescribe el fichero. Prueba siempre sobre una copia.
 

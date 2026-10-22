@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"mdcaster/internal/converter"
+	"mdcaster/internal/version"
 )
 
 const (
-	version = "1.0.0"
-	banner  = `
+	banner = `
 ╔═══════════════════════════════════════════════════════════════╗
 ║                     Markdown Caster                           ║
 ║            Convertidor de Múltiples Formatos                  ║
@@ -43,7 +43,7 @@ func main() {
 
 	// Mostrar versión si se solicita
 	if *showVersion {
-		info.Printf("Versión: %s\n", version)
+		info.Printf("Versión: %s\n", version.Version)
 		os.Exit(0)
 	}
 

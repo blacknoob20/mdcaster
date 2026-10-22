@@ -16,11 +16,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"mdcaster/internal/version"
 )
 
 var (
 	flagInplace = flag.Bool("inplace", false, "Rewrite the input file in place")
 	flagTDR     = flag.Bool("tdr", false, "Clean/format TDR-style Markdown exported from DOCX/PDF")
+	flagVersion = flag.Bool("version", false, "Show version")
 )
 
 func main() {
@@ -29,6 +32,13 @@ func main() {
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+
+	// La versión se comprueba antes de los argumentos: `mdclean --version` no
+	// necesita fichero de entrada.
+	if *flagVersion {
+		printVersion(os.Stdout)
+		os.Exit(0)
+	}
 
 	if flag.NArg() != 1 {
 		flag.Usage()
@@ -86,6 +96,14 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+// printVersion escribe la versión del proyecto en w.
+//
+// El número sale de internal/version: es la única fuente de verdad y la
+// que publica el tag de la release.
+func printVersion(w io.Writer) {
+	fmt.Fprintf(w, "Versión: %s\n", version.Version)
 }
 
 // readAllLines lee el contenido completo de r en líneas.
