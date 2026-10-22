@@ -35,6 +35,7 @@ una entrada nueva y la anterior **no se reescribe**: el historial forma parte de
 | [D18](#d18--el-parser-del-docx-se-parte-por-responsabilidad) | El parser del DOCX se parte por responsabilidad | Aceptada |
 | [D19](#d19--el-render-del-docx-se-parte-por-responsabilidad) | El render del DOCX se parte por responsabilidad | Aceptada |
 | [D20](#d20--cada-formato-vive-en-su-propio-paquete) | Cada formato vive en su propio paquete | Aceptada |
+| [D21](#d21--versionado-semántico-y-tags-solo-en-las-releases-relevantes) | Versionado semántico y tags solo en las releases relevantes | Aceptada |
 | [P1](#pendientes) | `ConvertDirectory` puede hacer `panic` | Resuelto por D17 |
 | [P2](#pendientes) | Escaneo no recursivo frente a la API recursiva | Resuelto por D17 |
 | [P3](#pendientes) | Hipervínculos DOCX parseados y no emitidos | Pendiente |
@@ -594,6 +595,62 @@ Reglas:
 - **Comportamiento idéntico, verificado**: los 76 DOCX del corpus institucional y el PDF del
   corpus se convierten **byte a byte igual**, con los mismos 77 pares fichero/porcentaje de
   integridad. Las asignaciones por documento no cambian: 144.803-144.806 antes y después.
+
+### D21 — Versionado semántico y tags solo en las releases relevantes
+
+**Estado:** aceptada
+
+**Contexto.** El repositorio declaraba su versión en una constante local de `cmd/mdcaster/main.go`
+(`version = "1.0.0"`) y no tenía **ningún tag**: treinta commits sin un solo punto de retorno
+publicado. Además, la spec de `cli/mdcaster.md` copiaba el número literal en su descripción del
+flag `--version`, de modo que cualquier release dejaba la spec desfasada.
+
+El problema de fondo no era el número, sino que no había una **fuente de verdad**: el valor
+vivía en un fichero de producción, el tag no existía, y no había ninguna regla que decidiera
+cuándo se publica una versión.
+
+**Decisión.** La versión sigue SemVer y tiene una fuente única:
+
+```
+internal/version/version.go   package version   — const Version = "X.Y.Z"
+```
+
+Los dos binarios la leen de ahí para su flag `--version`. Ningún otro fichero copia el número.
+
+El tipo de bump se deduce del tipo del commit (Conventional Commits, ya en uso en el proyecto):
+
+| Tipo de commit | Bump | ¿Tag? |
+|---|---|---|
+| `!` en el tipo (`feat(converter)!: ...`) | major | sí |
+| `feat` | minor | sí |
+| `fix` | patch | sí |
+| `docs`, `refactor`, `chore`, `test`, `perf` | — | no |
+
+Reglas:
+
+1. **Un tag es una release.** Se crea solo cuando el lote de commits desde el último tag incluye
+   `feat`, `fix` o un cambio breaking. `docs`, `refactor`, `chore`, `test` y `perf` no bumpean ni
+   etiquetan: no cambian el comportamiento observable.
+2. El bump se aplica **una vez por lote**, no por commit, y se toma el **tipo mayor** del lote.
+3. El tag es **anotado** (`git tag -a vX.Y.Z -m "mdcaster vX.Y.Z"`) y apunta al commit que ya
+   lleva la versión bumpeada.
+4. El tag se crea **en local**. Lo publica la persona con `git push origin vX.Y.Z`.
+5. Un cambio incompatible (flags, formato de salida, API) se marca con `!` en el tipo del commit.
+   Es la única señal que hace subir a major.
+
+**Consecuencias.**
+
+- `internal/version.Version` es el único sitio que se edita al publicar. Las specs y el README
+  describen "la versión actual" en vez de copiar el número, así que **no envejecen en cada
+  release**: el número solo aparece en el código y en el tag.
+- `mdclean` gana `--version`: antes solo `mdcaster` declaraba la suya, y cada binario la
+  tenía o no la tenía por su cuenta. Los dos leen el mismo sitio.
+- El `--version` de `mdclean` se comprueba **antes** del recuento de argumentos: consultar la
+  versión no exige un fichero de entrada.
+- Un test del paquete `version` comprueba que el número cumple `MAJOR.MINOR.PATCH`. Es la guarda
+  contra un bump mal escrito, que el tag haría inmutable.
+- El tag queda **en local** hasta que alguien lo publica. Un tag borrado en GitHub no se puede
+  volver a crear con el mismo nombre.
 
 ---
 

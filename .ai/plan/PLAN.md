@@ -20,6 +20,7 @@
 | 7 — Partición del parser DOCX | completada | El parser del DOCX en cuatro ficheros y `startElement` descompuesta por familia de elementos (D18) |
 | 8 — Partición del render DOCX | completada | El render del DOCX en tres ficheros y la numeración en tres (D19) |
 | 9 — Subpaquetes por formato | completada | `internal/converter/docx/` y `internal/converter/pdf/`, con la raíz como fachada (D20) |
+| 10 — Versionado y tags | completada | `internal/version` como fuente única del SemVer, `mdclean --version`, y la política de tags por tipo de commit (D21) |
 
 Verificación final de la fase 0-3: `gofmt` limpio, `go vet` limpio, `go test ./...` en verde,
 compila para linux, darwin y windows (amd64), 52 enlaces markdown y 111 referencias de código
@@ -58,6 +59,7 @@ contenido, misma estructura y la numeración real que muestra Word.
 | D18 | El parser del DOCX se parte en cuatro ficheros por responsabilidad | Aceptada |
 | D19 | El render del DOCX se parte en tres ficheros y la numeración en tres | Aceptada |
 | D20 | Cada formato vive en su propio paquete; la raíz es la fachada | Aceptada |
+| D21 | Versionado semántico con fuente única (`internal/version`) y tags solo en las releases relevantes | Aceptada |
 
 ### Pendientes
 

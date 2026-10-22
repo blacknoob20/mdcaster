@@ -43,3 +43,28 @@ Proyecto Go 1.21: CLI `mdcaster` y `mdclean` sobre la librería `internal/conver
   - El scope es el **dominio**, no el fichero: `mdclean`, `converter`, `color`, `specs`.
   - La descripción va en minúscula y con verbo: "simplifica", "extrae", "actualizar".
   - El cuerpo lleva las viñetas con lo concreto: cifras medidas, qué cambió y por qué.
+
+## Versionado y tags
+
+- La versión es **SemVer** y vive **solo** en `internal/version/version.go`. Ningún otro fichero
+  la copia: ni las specs, ni el README.
+- El tipo de bump se deduce de los commits **desde el último tag**:
+
+  | Tipo de commit | Bump | ¿Tag? |
+  |---|---|---|
+  | `!` en el tipo (`feat(converter)!: ...`) | major | sí |
+  | `feat` | minor | sí |
+  | `fix` | patch | sí |
+  | `docs`, `refactor`, `chore`, `test`, `perf` | — | no |
+
+- El bump se aplica **una vez por lote de trabajo**, no por commit: se toma el tipo mayor del lote.
+- Al cerrar un bloque de trabajo, con `go vet` y `go test` en verde:
+  1. Mira `git log --pretty=%s $(git describe --tags --abbrev=0)..HEAD` y decide el bump.
+  2. Edita `internal/version/version.go`.
+  3. Commit: `chore(release): publica la versión X.Y.Z`.
+  4. Crea el tag **anotado**: `git tag -a vX.Y.Z -m "mdcaster vX.Y.Z"`.
+- **No hagas push del tag.** Entrégale a la persona el comando `git push origin vX.Y.Z`: un tag
+  publicado en GitHub es costoso de revertir.
+- Marca con `!` en el tipo del commit todo cambio incompatible (flags, formato de salida, API):
+  es lo único que hace subir a major.
+- La política completa está en `ARCHITECTURE.md` (D21).
