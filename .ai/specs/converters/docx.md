@@ -377,7 +377,8 @@ El texto que extrae este processor es la base del cálculo de integridad, y es l
 `Converter.CheckIntegrity` lo reutiliza. El DOCX no se parsea dos veces.
 
 El texto incluye el de las notas al pie referenciadas, una vez cada una. La garantía de que no
-pierde nada la comprueba `TestIntegrity_ReusedTextMatchesIndependentRead`, que lee el original por
-una vía independiente y compara las dos cifras.
+pierde nada la comprueba `TestDocx_ExtractedTextMatchesIndependentRead`
+(`internal/converter/docx/reader_test.go`), que lee el original por una vía independiente y
+compara las dos cifras.
 
 Ver [../quality/integridad.md](../quality/integridad.md).

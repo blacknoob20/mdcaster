@@ -27,6 +27,15 @@ Proyecto Go 1.21: CLI `mdcaster` y `mdclean` sobre la librería `internal/conver
 - Los errores se devuelven al llamador, envueltos con `%w`, y se describen en español.
 - No añadas comportamiento sin documentarlo antes en la spec.
 
+## Tests
+
+- Las pruebas viven en `tests/`: `tests/integration/` (fachada, processors, integridad y
+  benchmarks) y `tests/unit/version/`. `tests/fixtures/` construye los DOCX sintéticos.
+- Las pruebas *white-box*, que necesitan identificadores privados, se quedan en su paquete:
+  `cmd/mdclean/*_test.go` e `internal/converter/docx/reader_test.go`. No exportes nada de la
+  producción solo para poder testearlo.
+- `tests/` es parte del módulo: `go test ./...` lo ejecuta todo, sin comandos adicionales.
+
 ## Verificación
 
 - **Go no está instalado en el host**: todo se compila y se prueba en **Docker**, con la imagen

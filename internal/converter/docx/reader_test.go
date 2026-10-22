@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"mdcaster/tests/fixtures"
 )
 
 // readDocxTextIndependently extrae el texto del original por una vía
@@ -139,10 +141,13 @@ func docxTokens(text string) []string {
 // Es la garantía de que la verificación de integridad, que reutiliza ese
 // texto, mide el documento entero.
 func TestDocx_ExtractedTextMatchesIndependentRead(t *testing.T) {
-	parts := docWithBody(`<w:p><w:r><w:t>Texto del cuerpo</w:t></w:r></w:p>
+	parts := fixtures.DocWithBody(`<w:p><w:r><w:t>Texto del cuerpo</w:t></w:r></w:p>
 <w:p><w:r><w:t>Otro párrafo</w:t></w:r></w:p>`)
 
-	input := buildTestDocx(t, parts)
+	input, err := fixtures.BuildDocx(t.TempDir(), parts)
+	if err != nil {
+		t.Fatalf("no se pudo crear el DOCX de prueba: %v", err)
+	}
 	output := filepath.Join(t.TempDir(), "salida.md")
 
 	processor := NewProcessor()

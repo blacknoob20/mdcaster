@@ -36,6 +36,7 @@ una entrada nueva y la anterior **no se reescribe**: el historial forma parte de
 | [D19](#d19--el-render-del-docx-se-parte-por-responsabilidad) | El render del DOCX se parte por responsabilidad | Aceptada |
 | [D20](#d20--cada-formato-vive-en-su-propio-paquete) | Cada formato vive en su propio paquete | Aceptada |
 | [D21](#d21--versionado-semántico-y-tags-solo-en-las-releases-relevantes) | Versionado semántico y tags solo en las releases relevantes | Aceptada |
+| [D22](#d22--las-pruebas-se-centralizan-en-tests-salvo-las-white-box) | Las pruebas se centralizan en `tests/`, salvo las white-box | Aceptada |
 | [P1](#pendientes) | `ConvertDirectory` puede hacer `panic` | Resuelto por D17 |
 | [P2](#pendientes) | Escaneo no recursivo frente a la API recursiva | Resuelto por D17 |
 | [P3](#pendientes) | Hipervínculos DOCX parseados y no emitidos | Pendiente |
@@ -651,6 +652,55 @@ Reglas:
   contra un bump mal escrito, que el tag haría inmutable.
 - El tag queda **en local** hasta que alguien lo publica. Un tag borrado en GitHub no se puede
   volver a crear con el mismo nombre.
+
+### D22 — Las pruebas se centralizan en `tests/`, salvo las white-box
+
+**Estado:** aceptada
+
+**Contexto.** Hasta [D20](#d20--cada-formato-vive-en-su-propio-paquete) los tests se repartían
+con el código: cada paquete llevaba su suite. El objetivo de esta decisión es que el árbol de
+pruebas sea legible de un vistazo y no se mezcle con el código de producción.
+
+Go pone dos límites: fuera del directorio de su paquete, una prueba pierde el acceso a los
+identificadores **no exportados**, y `package main` no se puede importar como librería. Pero la
+mayoría de las pruebas de mdcaster usan **APIs exportadas**: se pueden mover tal cual, cambiando
+solo los imports.
+
+**Decisión.** Las pruebas viven en un árbol propio:
+
+```
+tests/
+├── fixtures/       package fixtures    — DOCX sintéticos compartidos
+├── integration/    package integration — fachada, processors, integridad y benchmarks
+└── unit/version/   package version_test — el guard de SemVer
+```
+
+Reglas:
+
+1. Una prueba que usa **solo APIs exportadas** vive en `tests/`.
+2. Una prueba que necesita identificadores privados **se queda en su paquete**
+   (`cmd/mdclean/*_test.go`, `internal/converter/docx/reader_test.go`). No se exporta nada de la
+   producción para poder testearla.
+3. `tests/fixtures` es el único paquete **no test** bajo `tests/`: construye los DOCX sintéticos
+   que usan varias suites. No importa `testing`, para poder reutilizarlo desde un `_test.go`.
+4. `tests/` es parte del módulo `mdcaster`: `go test ./...` y `go test ./... -bench .` siguen
+   ejecutando todo, sin comandos adicionales.
+5. Los benchmarks se mudan con las pruebas: miden la API pública, no internals.
+
+**Consecuencias.**
+
+- `internal/converter`, `internal/converter/pdf` e `internal/version` se quedan sin ficheros de
+  prueba: sus suites están en `tests/`.
+- **D20 queda refinado, no reescrito:** los tests *blanco* (los que miran dentro) siguen junto al
+  código; los que miran desde fuera, en `tests/`.
+- Los tests de `mdclean` **no** se mueven: `package main` con funciones privadas (`joinerBetween`,
+  `shouldJoin`, `processTDR`…). Extraer esa lógica a un paquete interno importable es otro
+  cambio, con otro alcance.
+- Ningún cambio de comportamiento: mismas aserciones, mismos helpers, mismos nombres de test.
+  Verificado en verde con `go vet ./...`, `go test ./...` y `go test ./... -bench . -benchmem`.
+- Las specs citaban `TestIntegrity_ReusedTextMatchesIndependentRead`, un test que no existe: el
+  real es `TestDocx_ExtractedTextMatchesIndependentRead`. Corregido en las tres specs que lo
+  nombraban.
 
 ---
 

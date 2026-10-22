@@ -104,8 +104,9 @@ cada una una sola vez, y viene recortado si se activó `--skip-before-heading`.
 
 Antes había una segunda vía: la librería releía el original desde disco con un parser propio
 (`extractDocxContent`). Se ha eliminado por duplicar el parseo del DOCX. La garantía de que el
-texto del processor no pierde nada la comprueba `TestIntegrity_ReusedTextMatchesIndependentRead`,
-que lee el original por una vía independiente y compara las dos cifras.
+texto del processor no pierde nada la comprueba `TestDocx_ExtractedTextMatchesIndependentRead`
+(`internal/converter/docx/reader_test.go`), que lee el original por una vía independiente y
+compara las dos cifras.
 
 ## Normalización — `normalizeContent` (`integrity.go`)
 
@@ -206,8 +207,12 @@ corpus institucional.
 |---|---|
 | `TestIntegrity_DocxToMarkdownContainsOriginalText` | El Markdown contiene el texto original normalizado, o al menos sus 50 primeras palabras. Es **más estricta** que la función en runtime: el test verifica "el Markdown contiene el original", la función calcula "qué fracción de tokens aparece". |
 | `TestIntegrity_DocxReportsCoverage` | El porcentaje está en (0, 100] para un DOCX convertido. |
-| `TestIntegrity_ReusedTextMatchesIndependentRead` | El texto que el processor ya extrajo da la misma cifra que una lectura independiente del original. |
+| `TestDocx_ExtractedTextMatchesIndependentRead` | El texto que el processor ya extrajo da la misma cifra que una lectura independiente del original. |
 | `TestIntegrity_PdfIsNotMeasurable` | Documenta el límite actual: un PDF da 0. Cuando se resuelva P4, este test debe cambiar. |
+
+Los tres primeros viven en `tests/integration/`; el último, también. El que compara el texto
+expuesto con una lectura independiente se queda en `internal/converter/docx/reader_test.go`,
+porque necesita los identificadores privados del módulo.
 
 ## Gotchas
 

@@ -1,58 +1,26 @@
-package docx
+package integration
 
 import (
-	"archive/zip"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"mdcaster/internal/converter/docx"
+	"mdcaster/tests/fixtures"
 )
-
-// Cabecera y pie de un word/document.xml mínimo, con los namespaces que
-// usa el processor.
-const testDocHeader = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><w:body>`
-
-const testDocFooter = `</w:body></w:document>`
-
-// buildTestDocx crea un DOCX en un directorio temporal con las partes dadas.
-func buildTestDocx(t *testing.T, parts map[string]string) string {
-	t.Helper()
-
-	path := filepath.Join(t.TempDir(), "prueba.docx")
-
-	file, err := os.Create(path)
-	if err != nil {
-		t.Fatalf("no se pudo crear el DOCX de prueba: %v", err)
-	}
-	defer file.Close()
-
-	writer := zip.NewWriter(file)
-	for name, content := range parts {
-		entry, err := writer.Create(name)
-		if err != nil {
-			t.Fatalf("no se pudo crear la entrada %s: %v", name, err)
-		}
-		if _, err := entry.Write([]byte(content)); err != nil {
-			t.Fatalf("no se pudo escribir la entrada %s: %v", name, err)
-		}
-	}
-
-	if err := writer.Close(); err != nil {
-		t.Fatalf("no se pudo cerrar el ZIP: %v", err)
-	}
-
-	return path
-}
 
 // convertDocx convierte un DOCX y devuelve el Markdown generado.
 func convertDocx(t *testing.T, parts map[string]string) string {
 	t.Helper()
 
-	input := buildTestDocx(t, parts)
+	input, err := fixtures.BuildDocx(t.TempDir(), parts)
+	if err != nil {
+		t.Fatalf("no se pudo crear el DOCX de prueba: %v", err)
+	}
 	output := filepath.Join(t.TempDir(), "salida.md")
 
-	p := NewProcessor()
+	p := docx.NewProcessor()
 	if err := p.Process(input, output); err != nil {
 		t.Fatalf("la conversión falló: %v", err)
 	}
@@ -63,13 +31,6 @@ func convertDocx(t *testing.T, parts map[string]string) string {
 	}
 
 	return string(data)
-}
-
-// docWithBody crea las partes de un DOCX con el cuerpo indicado.
-func docWithBody(body string) map[string]string {
-	return map[string]string{
-		"word/document.xml": testDocHeader + body + testDocFooter,
-	}
 }
 
 // TestDocx_TableBecomesMarkdownTable comprueba que una tabla se convierte en
@@ -83,7 +44,7 @@ func TestDocx_TableBecomesMarkdownTable(t *testing.T) {
 </w:tbl>
 <w:p><w:r><w:t>Después de la tabla</w:t></w:r></w:p>`
 
-	md := convertDocx(t, docWithBody(body))
+	md := convertDocx(t, fixtures.DocWithBody(body))
 
 	want := []string{
 		"| Nombre | Valor |",
@@ -128,7 +89,7 @@ func TestDocx_TableGridSpanAndVerticalMerge(t *testing.T) {
   </w:tr>
 </w:tbl>`
 
-	md := convertDocx(t, docWithBody(body))
+	md := convertDocx(t, fixtures.DocWithBody(body))
 
 	if strings.Contains(md, "no debe aparecer") {
 		t.Errorf("el texto de una celda que continúa la unión vertical se emissions:\n%s", md)
@@ -146,7 +107,7 @@ func TestDocx_TableGridSpanAndVerticalMerge(t *testing.T) {
 // TestDocx_NumberedListUsesRealFormat comprueba que una lista numerada usa
 // el contador real, con reinicio por lista.
 func TestDocx_NumberedListUsesRealFormat(t *testing.T) {
-	parts := docWithBody(`<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Primero</w:t></w:r></w:p>
+	parts := fixtures.DocWithBody(`<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Primero</w:t></w:r></w:p>
 <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Segundo</w:t></w:r></w:p>
 <w:p><w:r><w:t>Texto normal</w:t></w:r></w:p>
 <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Tercero</w:t></w:r></w:p>`)
@@ -176,7 +137,7 @@ func TestDocx_NumberedListUsesRealFormat(t *testing.T) {
 // TestDocx_ListStartOverride comprueba que w:startOverride fija el valor
 // inicial del contador.
 func TestDocx_ListStartOverride(t *testing.T) {
-	parts := docWithBody(`<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Uno</w:t></w:r></w:p>
+	parts := fixtures.DocWithBody(`<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Uno</w:t></w:r></w:p>
 <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Dos</w:t></w:r></w:p>`)
 
 	parts["word/numbering.xml"] = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -184,7 +145,8 @@ func TestDocx_ListStartOverride(t *testing.T) {
   <w:abstractNum w:abstractNumId="0">
     <w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/></w:lvl>
   </w:abstractNum>
-  <w:num w:numId="1"><w:abstractNumId w:val="0"/><w:lvlOverride w:ilvl="0"><w:startOverride w:val="5"/></w:lvlOverride></w:num>
+  <w:num w:numId="1"><w:abstractNumId w:val="0"/>
+    <w:lvlOverride w:ilvl="0"><w:startOverride w:val="5"/></w:lvlOverride></w:num>
 </w:numbering>`
 
 	md := convertDocx(t, parts)
@@ -196,7 +158,7 @@ func TestDocx_ListStartOverride(t *testing.T) {
 
 // TestDocx_BulletList comprueba que las viñetas siguen siendo viñetas.
 func TestDocx_BulletList(t *testing.T) {
-	parts := docWithBody(`<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Viñeta</w:t></w:r></w:p>`)
+	parts := fixtures.DocWithBody(`<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Viñeta</w:t></w:r></w:p>`)
 
 	parts["word/numbering.xml"] = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
@@ -216,7 +178,7 @@ func TestDocx_BulletList(t *testing.T) {
 // TestDocx_AlphabeticListUsesHTML comprueba que una lista alfabética, que
 // Markdown no puede representar, se emite como <ol type="a">.
 func TestDocx_AlphabeticListUsesHTML(t *testing.T) {
-	parts := docWithBody(`<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Primero</w:t></w:r></w:p>
+	parts := fixtures.DocWithBody(`<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Primero</w:t></w:r></w:p>
 <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Segundo</w:t></w:r></w:p>`)
 
 	parts["word/numbering.xml"] = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -240,7 +202,7 @@ func TestDocx_AlphabeticListUsesHTML(t *testing.T) {
 // TestDocx_CompositeLabelIsLiteral comprueba que una etiqueta compuesta
 // ("2.1.") se emite como texto, porque no existe en Markdown.
 func TestDocx_CompositeLabelIsLiteral(t *testing.T) {
-	parts := docWithBody(`<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Uno</w:t></w:r></w:p>
+	parts := fixtures.DocWithBody(`<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Uno</w:t></w:r></w:p>
 <w:p><w:pPr><w:numPr><w:ilvl w:val="1"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Sub</w:t></w:r></w:p>`)
 
 	parts["word/numbering.xml"] = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -265,7 +227,7 @@ func TestDocx_CompositeLabelIsLiteral(t *testing.T) {
 // TestDocx_NestedListIndentation comprueba que los elementos anidados se
 // sangran y que el nivel profundo reinicia cuando el superficial avanza.
 func TestDocx_NestedListIndentation(t *testing.T) {
-	parts := docWithBody(`<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Uno</w:t></w:r></w:p>
+	parts := fixtures.DocWithBody(`<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Uno</w:t></w:r></w:p>
 <w:p><w:pPr><w:numPr><w:ilvl w:val="1"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Sub A</w:t></w:r></w:p>
 <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Dos</w:t></w:r></w:p>
 <w:p><w:pPr><w:numPr><w:ilvl w:val="1"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Sub B</w:t></w:r></w:p>`)
@@ -295,7 +257,7 @@ func TestDocx_NestedListIndentation(t *testing.T) {
 // TestDocx_Frontmatter comprueba que los metadatos del documento se emiten
 // como frontmatter YAML.
 func TestDocx_Frontmatter(t *testing.T) {
-	parts := docWithBody(`<w:p><w:r><w:t>Cuerpo</w:t></w:r></w:p>`)
+	parts := fixtures.DocWithBody(`<w:p><w:r><w:t>Cuerpo</w:t></w:r></w:p>`)
 	parts["docProps/core.xml"] = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/"><dc:creator>Nombre Autor</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">2026-01-02T03:04:05Z</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">2026-02-03T04:05:06Z</dcterms:modified></cp:coreProperties>`
 
@@ -320,7 +282,7 @@ func TestDocx_Frontmatter(t *testing.T) {
 // TestDocx_NoFrontmatterWithoutMetadata comprueba que sin metadatos no se
 // emite frontmatter.
 func TestDocx_NoFrontmatterWithoutMetadata(t *testing.T) {
-	md := convertDocx(t, docWithBody(`<w:p><w:r><w:t>Cuerpo</w:t></w:r></w:p>`))
+	md := convertDocx(t, fixtures.DocWithBody(`<w:p><w:r><w:t>Cuerpo</w:t></w:r></w:p>`))
 
 	if strings.HasPrefix(md, "---") {
 		t.Errorf("se emitió frontmatter sin metadatos:\n%s", md)
@@ -330,7 +292,7 @@ func TestDocx_NoFrontmatterWithoutMetadata(t *testing.T) {
 // TestDocx_Footnotes comprueba que las notas al pie se referencian en el
 // cuerpo y se definen al final.
 func TestDocx_Footnotes(t *testing.T) {
-	parts := docWithBody(`<w:p><w:r><w:t>Texto con nota</w:t></w:r><w:r><w:footnoteReference w:id="2"/></w:r></w:p>`)
+	parts := fixtures.DocWithBody(`<w:p><w:r><w:t>Texto con nota</w:t></w:r><w:r><w:footnoteReference w:id="2"/></w:r></w:p>`)
 
 	parts["word/footnotes.xml"] = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
@@ -354,17 +316,20 @@ func TestDocx_Footnotes(t *testing.T) {
 // TestDocx_ImageIsExtractedAndLinked comprueba que una imagen del cuerpo se
 // extrae a disco y se enlaza en el Markdown.
 func TestDocx_ImageIsExtractedAndLinked(t *testing.T) {
-	parts := docWithBody(`<w:p><w:r><w:drawing><wp:inline><wp:docPr id="1" name="Picture 1" descr="Un logo"/><a:blip r:embed="rId7"/></wp:inline></w:drawing></w:r></w:p>`)
+	parts := fixtures.DocWithBody(`<w:p><w:r><w:drawing><wp:inline><wp:docPr id="1" name="Picture 1" descr="Un logo"/><a:blip r:embed="rId7"/></wp:inline></w:drawing></w:r></w:p>`)
 
 	parts["word/_rels/document.xml.rels"] = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId7" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/imagen1.png"/></Relationships>`
 
 	parts["word/media/imagen1.png"] = "contenido binario de la imagen"
 
-	input := buildTestDocx(t, parts)
+	input, err := fixtures.BuildDocx(t.TempDir(), parts)
+	if err != nil {
+		t.Fatalf("no se pudo crear el DOCX de prueba: %v", err)
+	}
 	output := filepath.Join(t.TempDir(), "salida.md")
 
-	p := NewProcessor()
+	p := docx.NewProcessor()
 	if err := p.Process(input, output); err != nil {
 		t.Fatalf("la conversión falló: %v", err)
 	}
@@ -392,7 +357,7 @@ func TestDocx_ImageIsExtractedAndLinked(t *testing.T) {
 // TestDocx_MissingImageIsNotBrokenLink comprueba que una imagen sin
 // relación no genera un enlace roto.
 func TestDocx_MissingImageIsNotBrokenLink(t *testing.T) {
-	parts := docWithBody(`<w:p><w:r><w:drawing><wp:inline><wp:docPr id="1" name="Picture 1"/><a:blip r:embed="rId99"/></wp:inline></w:drawing></w:r></w:p>`)
+	parts := fixtures.DocWithBody(`<w:p><w:r><w:drawing><wp:inline><wp:docPr id="1" name="Picture 1"/><a:blip r:embed="rId99"/></wp:inline></w:drawing></w:r></w:p>`)
 
 	md := convertDocx(t, parts)
 
@@ -408,7 +373,7 @@ func TestDocx_BoldOnlyFromRuns(t *testing.T) {
 <w:p><w:r><w:rPr><w:b w:val="0"/></w:rPr><w:t>También sin negrita</w:t></w:r></w:p>
 <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Con negrita</w:t></w:r></w:p>`
 
-	md := convertDocx(t, docWithBody(body))
+	md := convertDocx(t, fixtures.DocWithBody(body))
 
 	if strings.Contains(md, "**Sin negrita**") {
 		t.Errorf("la marca de párrafo aplicó negrita:\n%s", md)
@@ -424,7 +389,7 @@ func TestDocx_BoldOnlyFromRuns(t *testing.T) {
 // TestDocx_EmptyParagraphDoesNotBreakListNumbering comprueba que un párrafo
 // numerado vacío consume su número, como en Word.
 func TestDocx_EmptyParagraphDoesNotBreakListNumbering(t *testing.T) {
-	parts := docWithBody(`<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr></w:p>
+	parts := fixtures.DocWithBody(`<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr></w:p>
 <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr></w:p>
 <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Visible</w:t></w:r></w:p>`)
 
@@ -446,7 +411,7 @@ func TestDocx_EmptyParagraphDoesNotBreakListNumbering(t *testing.T) {
 // TestDocx_HeadingKeepsNumberLabel comprueba que un párrafo numerado con
 // estilo de título conserva la etiqueta.
 func TestDocx_HeadingKeepsNumberLabel(t *testing.T) {
-	parts := docWithBody(`<w:p><w:pPr><w:pStyle w:val="Heading2"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Sección</w:t></w:r></w:p>`)
+	parts := fixtures.DocWithBody(`<w:p><w:pPr><w:pStyle w:val="Heading2"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Sección</w:t></w:r></w:p>`)
 
 	parts["word/numbering.xml"] = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
@@ -466,7 +431,7 @@ func TestDocx_HeadingKeepsNumberLabel(t *testing.T) {
 // TestDocx_WithoutNumberingFallsBackToBullets comprueba que un DOCX sin
 // numbering.xml degrada a viñetas, sin fallar.
 func TestDocx_WithoutNumberingFallsBackToBullets(t *testing.T) {
-	md := convertDocx(t, docWithBody(`<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Elemento</w:t></w:r></w:p>`))
+	md := convertDocx(t, fixtures.DocWithBody(`<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Elemento</w:t></w:r></w:p>`))
 
 	if !strings.Contains(md, "- Elemento") {
 		t.Errorf("sin numbering.xml el elemento no es una viñeta:\n%s", md)
@@ -481,7 +446,7 @@ func TestDocx_UnderlineIsEmittedAsHTML(t *testing.T) {
 <w:p><w:r><w:rPr><w:u w:val="none"/></w:rPr><w:t>Sin subrayado</w:t></w:r></w:p>
 <w:p><w:r><w:rPr><w:b/><w:u/></w:rPr><w:t>Negrita y subrayado</w:t></w:r></w:p>`
 
-	md := convertDocx(t, docWithBody(body))
+	md := convertDocx(t, fixtures.DocWithBody(body))
 
 	if !strings.Contains(md, "<u>Subrayado</u>") {
 		t.Errorf("el subrayado no se emitió:\n%s", md)
@@ -507,11 +472,14 @@ func TestDocx_SkipBeforeHeading(t *testing.T) {
 <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Título real</w:t></w:r></w:p>
 <w:p><w:r><w:t>Cuerpo del documento</w:t></w:r></w:p>`
 
-	parts := docWithBody(body)
-	input := buildTestDocx(t, parts)
+	parts := fixtures.DocWithBody(body)
+	input, err := fixtures.BuildDocx(t.TempDir(), parts)
+	if err != nil {
+		t.Fatalf("no se pudo crear el DOCX de prueba: %v", err)
+	}
 	output := filepath.Join(t.TempDir(), "salida.md")
 
-	p := NewProcessor()
+	p := docx.NewProcessor()
 	p.SetSkipBeforeHeading(true)
 	if err := p.Process(input, output); err != nil {
 		t.Fatalf("la conversión falló: %v", err)
@@ -539,11 +507,14 @@ func TestDocx_SkipBeforeHeading(t *testing.T) {
 func TestDocx_SkipBeforeHeadingWithoutHeading(t *testing.T) {
 	body := `<w:p><w:r><w:t>Solo texto</w:t></w:r></w:p>`
 
-	parts := docWithBody(body)
-	input := buildTestDocx(t, parts)
+	parts := fixtures.DocWithBody(body)
+	input, err := fixtures.BuildDocx(t.TempDir(), parts)
+	if err != nil {
+		t.Fatalf("no se pudo crear el DOCX de prueba: %v", err)
+	}
 	output := filepath.Join(t.TempDir(), "salida.md")
 
-	p := NewProcessor()
+	p := docx.NewProcessor()
 	p.SetSkipBeforeHeading(true)
 	if err := p.Process(input, output); err != nil {
 		t.Fatalf("la conversión falló: %v", err)

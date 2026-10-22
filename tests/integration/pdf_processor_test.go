@@ -1,4 +1,4 @@
-package pdf
+package integration
 
 import (
 	"os"
@@ -6,12 +6,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"mdcaster/internal/converter/pdf"
 )
 
 // TestProcess_MissingFile comprueba que un fichero que no existe produce un
 // error, en vez de un Markdown vacío.
 func TestProcess_MissingFile(t *testing.T) {
-	processor := NewProcessor()
+	processor := pdf.NewProcessor()
 
 	input := filepath.Join(t.TempDir(), "no-existe.pdf")
 	output := filepath.Join(t.TempDir(), "salida.md")
@@ -35,7 +37,7 @@ func TestProcess_NotAPdf(t *testing.T) {
 		t.Fatalf("no se pudo crear el fichero de prueba: %v", err)
 	}
 
-	processor := NewProcessor()
+	processor := pdf.NewProcessor()
 	err := processor.Process(input, filepath.Join(t.TempDir(), "salida.md"))
 	if err == nil {
 		t.Fatal("se esperaba un error para un fichero que no es un PDF")

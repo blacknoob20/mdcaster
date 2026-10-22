@@ -1,10 +1,12 @@
-package converter
+package integration
 
 import (
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"mdcaster/internal/converter"
 )
 
 // BenchmarkConvertDocx mide la conversión de un DOCX del corpus.
@@ -12,7 +14,7 @@ func BenchmarkConvertDocx(b *testing.B) {
 	input := requireCorpusFile(b, "word", "*.docx")
 	out := filepath.Join(b.TempDir(), "out.md")
 
-	conv := NewConverter()
+	conv := converter.NewConverter()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -31,7 +33,7 @@ func BenchmarkCheckIntegrityDocx(b *testing.B) {
 	input := requireCorpusFile(b, "word", "*.docx")
 	out := filepath.Join(b.TempDir(), "out.md")
 
-	conv := NewConverter()
+	conv := converter.NewConverter()
 	if err := conv.Convert(input, out); err != nil {
 		b.Fatalf("Convert falló: %v", err)
 	}
@@ -52,7 +54,7 @@ func BenchmarkConvertPdf(b *testing.B) {
 	input := requireCorpusFile(b, "pdf", "*.pdf")
 	out := filepath.Join(b.TempDir(), "out.md")
 
-	conv := NewConverter()
+	conv := converter.NewConverter()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -73,7 +75,7 @@ func BenchmarkConvertBatch(b *testing.B) {
 	dir := b.TempDir()
 	out := filepath.Join(dir, "out.md")
 
-	conv := NewConverter()
+	conv := converter.NewConverter()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

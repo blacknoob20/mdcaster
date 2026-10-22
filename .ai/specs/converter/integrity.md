@@ -55,8 +55,8 @@ Es el método que usa la CLI.
 **No hay una segunda vía.** Antes, si el processor no tenía texto, la librería releía el original
 desde disco con un parser propio (`extractDocxContent`). Esa vía duplicaba el parseo del DOCX y se
 ha eliminado: el texto del processor es la única fuente. La garantía de que no pierde nada la
-comprueba `TestIntegrity_ReusedTextMatchesIndependentRead`, que lee el original por una vía
-independiente y compara las dos cifras.
+comprueba `TestDocx_ExtractedTextMatchesIndependentRead` (`internal/converter/docx/reader_test.go`),
+que lee el original por una vía independiente y compara las dos cifras.
 
 ### `CheckIntegrityAgainst` — `internal/converter/integrity.go:42-81`
 

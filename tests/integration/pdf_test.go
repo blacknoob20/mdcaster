@@ -1,4 +1,4 @@
-package converter
+package integration
 
 import (
 	"os"
@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"mdcaster/internal/converter"
 )
 
 // TestConvertPdf_CreatesTextFile convierte un PDF del corpus y comprueba que
@@ -21,7 +23,7 @@ func TestConvertPdf_CreatesTextFile(t *testing.T) {
 	input := requireCorpusFile(t, "pdf", "*.pdf")
 	out := filepath.Join(t.TempDir(), "out.md")
 
-	conv := NewConverter()
+	conv := converter.NewConverter()
 	if err := conv.Convert(input, out); err != nil {
 		t.Fatalf("Convert falló: %v", err)
 	}
@@ -56,7 +58,7 @@ func TestIntegrity_PdfIsNotMeasurable(t *testing.T) {
 	input := requireCorpusFile(t, "pdf", "*.pdf")
 	out := filepath.Join(t.TempDir(), "out.md")
 
-	conv := NewConverter()
+	conv := converter.NewConverter()
 	if err := conv.Convert(input, out); err != nil {
 		t.Fatalf("Convert falló: %v", err)
 	}

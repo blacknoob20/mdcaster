@@ -1,10 +1,12 @@
-package converter
+package integration
 
 import (
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"mdcaster/internal/converter"
 )
 
 // TestConvertFile_CreatesMarkdownWithContent convierte cada DOCX del corpus y
@@ -19,7 +21,7 @@ func TestConvertFile_CreatesMarkdownWithContent(t *testing.T) {
 		t.Run(filepath.Base(input), func(t *testing.T) {
 			out := filepath.Join(t.TempDir(), "out.md")
 
-			conv := NewConverter()
+			conv := converter.NewConverter()
 			if err := conv.ConvertFile(input, out); err != nil {
 				t.Fatalf("ConvertFile falló: %v", err)
 			}
@@ -65,7 +67,7 @@ func TestConvertFile_UnsupportedExtension(t *testing.T) {
 		t.Fatalf("no se pudo crear el fichero de prueba: %v", err)
 	}
 
-	conv := NewConverter()
+	conv := converter.NewConverter()
 	err := conv.ConvertFile(path, filepath.Join(t.TempDir(), "out.md"))
 	if err == nil {
 		t.Fatal("se esperaba un error para una extensión no soportada")
@@ -78,7 +80,7 @@ func TestConvertFile_UnsupportedExtension(t *testing.T) {
 // TestConvertFile_MissingInput comprueba que la entrada inexistente se
 // rechaza antes de escribir nada.
 func TestConvertFile_MissingInput(t *testing.T) {
-	conv := NewConverter()
+	conv := converter.NewConverter()
 	err := conv.ConvertFile(filepath.Join(t.TempDir(), "no-existe.docx"), filepath.Join(t.TempDir(), "out.md"))
 	if err == nil {
 		t.Fatal("se esperaba un error para una entrada inexistente")

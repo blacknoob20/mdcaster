@@ -1,4 +1,4 @@
-package converter
+package integration
 
 import (
 	"archive/zip"
@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"mdcaster/internal/converter"
 )
 
 // readDocxPlainText extrae el texto (elementos <w:t>) de word/document.xml
@@ -106,7 +108,7 @@ func TestIntegrity_DocxToMarkdownContainsOriginalText(t *testing.T) {
 
 	// convertir a Markdown
 	out := filepath.Join(t.TempDir(), "integrity.md")
-	conv := NewConverter()
+	conv := converter.NewConverter()
 	if err := conv.ConvertFile(input, out); err != nil {
 		t.Fatalf("ConvertFile falló: %v", err)
 	}
@@ -146,7 +148,7 @@ func TestIntegrity_DocxReportsCoverage(t *testing.T) {
 	input := requireCorpusFile(t, "word", "*.docx")
 	out := filepath.Join(t.TempDir(), "integrity.md")
 
-	conv := NewConverter()
+	conv := converter.NewConverter()
 	if err := conv.ConvertFile(input, out); err != nil {
 		t.Fatalf("ConvertFile falló: %v", err)
 	}
