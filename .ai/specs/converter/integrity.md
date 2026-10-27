@@ -85,7 +85,7 @@ llama dos veces por verificación.
 
 ## Gotchas
 
-1. El PDF da `0`, no "no medido": la CLI lo muestra con 🔴 aunque la conversión sea correcta
+1. El PDF da `0`, no "no medido": la CLI lo muestra con ❌ aunque la conversión sea correcta
    (ver [P4]).
 2. Un documento vacío da `100`, no `0`: no hay contenido que perder.
 3. `normalizeContent` **borra** los acentos y la `ñ` en vez de normalizarlos: `técnica` → `tcnica`

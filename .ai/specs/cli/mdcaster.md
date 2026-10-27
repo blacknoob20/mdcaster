@@ -170,7 +170,7 @@ Reglas:
 | 🟢 | `>= 95` | Integridad óptima |
 | 🟡 | `>= 80` | Integridad buena |
 | 🟠 | `>= 50` | Integridad aceptable |
-| 🔴 | `< 50` | Integridad deficiente |
+| ❌ | `< 50` | Integridad deficiente |
 
 ## Resumen final — `printResults` (`cmd/mdcaster/main.go:262-325`)
 
@@ -203,6 +203,7 @@ Reglas:
 | `success` | verde bold | ✅ conversiones correctas |
 | `info` | cyan | mensajes informativos |
 | `warning` | yellow | avisos |
+| `orange` | naranja (ANSI 256, 208) | indicador de integridad aceptable |
 | `errorMsg` | rojo bold | errores |
 | `highlight` | magenta bold | banner, títulos y métricas destacadas |
 
@@ -228,6 +229,12 @@ Reglas:
 Secciones, en orden: descripción, `USO` (vía `printUsage`), `OPCIONES`, `INDICADOR DE INTEGRIDAD`
 con los 4 símbolos, `EJEMPLOS` con 4 casos.
 
+Las cuatro líneas del indicador se imprimen con los estilos de color semánticos ya definidos
+en `cmd/mdcaster/ansi.go`: `success` (verde) para óptima, `warning` (amarillo) para buena,
+`orange` (naranja, ANSI 256) para aceptable y `errorMsg` (rojo) para deficiente. El color se
+respeta según `colorEnabled`
+(`NO_COLOR`, `TERM=dumb`, salida no-terminal).
+
 `printUsage` (`cmd/mdcaster/help.go:48-52`) imprime:
 
 ```
@@ -250,7 +257,7 @@ USO:
 2. El escaneo de directorios **no es recursivo**: los ficheros en subcarpetas se ignoran. La
    librería ya no ofrece ninguna variante recursiva.
 3. `-o` siempre gana sobre `--output` (ver "Resolución de flags").
-4. El porcentaje de un PDF siempre es 0 % (🔴): el processor del PDF no expone su texto, así que
+4. El porcentaje de un PDF siempre es 0 % (❌): el processor del PDF no expone su texto, así que
    la verificación no tiene con qué comparar.
 5. El orden de los ficheros en el resumen no es el de entrada, sino el de finalización de los workers.
 6. `mdcaster` **no** tiene flag de recursividad. Para procesar subcarpetas hay que invocarlo por

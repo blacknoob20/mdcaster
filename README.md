@@ -20,7 +20,7 @@
 - **Flexible**: Convierte un archivo o una carpeta completa
 - **Salida personalizable**: Define tu propia carpeta de destino
 - **Verificación de integridad**: Muestra el porcentaje de contenido que se conservó en la conversión
-- **Indicador visual**: 🟢 Verde, 🟡 Amarillo, 🟠 Naranja, 🔴 Rojo según integridad
+- **Indicador visual**: 🟢 Verde, 🟡 Amarillo, 🟠 Naranja, ❌ Rojo según integridad
 - **Limpieza posterior**: `mdclean` normaliza el Markdown generado (modo genérico y modo TDR)
 - **Sin dependencias externas**: Solo la biblioteca estándar de Go
 
@@ -180,15 +180,15 @@ El convertidor muestra un indicador visual de la integridad del contenido:
 | 🟢 Verde | ≥95% | Integridad óptima - Todo el contenido se conservó |
 | 🟡 Amarillo | 80-94% | Integridad buena - Casi todo el contenido se conservó |
 | 🟠 Naranja | 50-79% | Integridad aceptable - Parte del contenido se conservó |
-| 🔴 Rojo | <50% | Integridad deficiente - Se perdió mucho contenido |
+| ❌ Rojo | <50% | Integridad deficiente - Se perdió mucho contenido |
 
 La integridad mide qué porcentaje de las palabras del texto original aparece en el Markdown
 generado. Cada archivo muestra su porcentaje durante la conversión, y al final un resumen con el
 **Promedio**, la **Mínima** y la **Máxima**.
 
 > **Nota**: la verificación de integridad solo es válida para **DOCX**. En archivos PDF el porcentaje
-> se muestra como 0 % (🔴) porque el verificador solo sabe leer el original en formato DOCX. En un
-> PDF el 🔴 no indica un fallo de conversión.
+> se muestra como 0 % (❌) porque el verificador solo sabe leer el original en formato DOCX. En un
+> PDF el ❌ no indica un fallo de conversión.
 
 ## 🧹 Limpieza de Markdown (`mdclean`)
 

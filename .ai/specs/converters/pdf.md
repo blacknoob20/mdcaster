@@ -82,7 +82,7 @@ Este mensaje es **parte del contrato**: nombra la dependencia y la acción corre
 modo que no expone el texto que extrajo y la verificación no tiene con qué comparar: el resultado
 es `0`.
 
-Consecuencia visible: al convertir un PDF, `mdcaster` muestra **🔴 0.0 %** aunque la conversión haya
+Consecuencia visible: al convertir un PDF, `mdcaster` muestra **❌ 0.0 %** aunque la conversión haya
 sido correcta. No es un fallo de conversión: es una limitación de la medición.
 
 Ver [../quality/integridad.md](../quality/integridad.md).

@@ -743,7 +743,7 @@ las usa para localizar las imágenes: los enlaces del cuerpo se pierden.
 
 ### P4 — El PDF se muestra como 0 % en vez de "no medido"
 
-La verificación de integridad solo sabe leer DOCX. Sobre un PDF devuelve 0 y la CLI muestra 🔴,
+La verificación de integridad solo sabe leer DOCX. Sobre un PDF devuelve 0 y la CLI muestra ❌,
 que parece un fallo de conversión cuando no lo es.
 
 **Opciones:** mostrar "no medido" en la salida, o extender la verificación a PDF.

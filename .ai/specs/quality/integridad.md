@@ -134,7 +134,7 @@ coherente**. Pero la medida se calcula sobre tokens degradados. Ver [P6](../../.
 | 🟢 | `>= 95` | Integridad óptima — todo el contenido se conservó |
 | 🟡 | `80..94` | Integridad buena — casi todo el contenido se conservó |
 | 🟠 | `50..79` | Integridad aceptable — parte del contenido se conservó |
-| 🔴 | `< 50` | Integridad deficiente — se perdió mucho contenido |
+| ❌ | `< 50` | Integridad deficiente — se perdió mucho contenido |
 
 ## Uso en la CLI — `cmd/mdcaster/main.go`
 
@@ -145,7 +145,7 @@ Si no:
    integrityPercent = 0
 ```
 
-La integridad **solo** se mide cuando la conversión fue exitosa. En caso de error, el símbolo es 🔴
+La integridad **solo** se mide cuando la conversión fue exitosa. En caso de error, el símbolo es ❌
 por el valor 0.
 
 ## Agregación en el resumen — `cmd/mdcaster/main.go`
@@ -163,10 +163,10 @@ por el valor 0.
 La verificación mide el texto que expone el processor, y el del PDF no lo expone: `pdf.Processor`
 no implementa `TextExtractor`, así que el resultado es `0`.
 
-**Consecuencia visible:** al convertir un PDF, `mdcaster` muestra **🔴 0.0 %** aunque la conversión
+**Consecuencia visible:** al convertir un PDF, `mdcaster` muestra **❌ 0.0 %** aunque la conversión
 haya sido perfectamente correcta. El porcentaje de un PDF **no significa nada** hoy.
 
-Regla para la CLI: un 🔴 en un PDF **no es** un fallo de conversión. No debe usarse para
+Regla para la CLI: un ❌ en un PDF **no es** un fallo de conversión. No debe usarse para
 diagnosticar problemas con PDF. Ver [P4](../../../ARCHITECTURE.md#pendientes).
 
 ## Limitación vigente: la métrica no mide estructura

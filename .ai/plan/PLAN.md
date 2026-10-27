@@ -68,7 +68,7 @@ contenido, misma estructura y la numeración real que muestra Word.
 | P1 | `Converter.ConvertDirectory` puede hacer `panic`. Corregir o eliminar (la CLI no lo usa) | Resuelto por D17 |
 | P2 | `mdcaster` escanea sin recursión, pero la librería sí tiene versión recursiva | Resuelto por D17 |
 | P3 | Los hipervínculos DOCX se parsean y no se emiten. Emitirlos o quitar el parseo |
-| P4 | Un PDF aparece como 0 % (🔴). Mostrar "no medido" en lugar de 0 |
+| P4 | Un PDF aparece como 0 % (❌). Mostrar "no medido" en lugar de 0 |
 | P6 | La normalización borra acentos y `ñ` en vez de transliterarlos |
 | P7 | Las etiquetas de lista dentro de una celda de tabla se pierden |
 | P8 | El subrayado (`w:u`) no se conserva | Resuelto por D14 |

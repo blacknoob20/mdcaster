@@ -98,7 +98,7 @@ Entrada (.md)
 | Umbral 🟢 | `>= 95` | `cmd/mdcaster/main.go:250` |
 | Umbral 🟡 | `>= 80` | `cmd/mdcaster/main.go:252` |
 | Umbral 🟠 | `>= 50` | `cmd/mdcaster/main.go:254` |
-| Umbral 🔴 | `< 50` | `cmd/mdcaster/main.go:256` |
+| Umbral ❌ | `< 50` | `cmd/mdcaster/main.go:256` |
 | Línea de texto DOCX | 2 espacios por `w:tab`, `\n` por `w:br` | `internal/converter/docx/parser.go` |
 | Negrita / cursiva / tachado | `**x**`, `*x*`, `~~x~~` | `internal/converter/docx/spans.go` |
 | Subrayado | `<u>x</u>` (HTML en línea) | `internal/converter/docx/spans.go` |
@@ -225,7 +225,7 @@ entrada en [`ARCHITECTURE.md`](../../ARCHITECTURE.md#pendientes).
 
 | # | Ubicación | Descripción | Impacto |
 |---|---|---|---|
-| 1 | `internal/converter/integrity.go:29-32` | La verificación solo mide lo que el processor expone, y el del PDF no implementa `TextExtractor`: sobre un PDF devuelve `0`. | Medio: los PDF salen con 🔴 (0 %) aunque la conversión sea correcta. |
+| 1 | `internal/converter/integrity.go:29-32` | La verificación solo mide lo que el processor expone, y el del PDF no implementa `TextExtractor`: sobre un PDF devuelve `0`. | Medio: los PDF salen con ❌ (0 %) aunque la conversión sea correcta. |
 | 2 | `internal/converter/integrity.go:89-97` | `normalizeContent` filtra con `[^a-z0-9\s]`, que **borra** los caracteres acentuados y la `ñ` en vez de normalizarlos: `técnica` → `tcnica`. | Medio: la integridad se calcula sobre tokens degradados. Consistente entre original y Markdown, por lo que no rompe la comparación, pero penaliza la precisión. |
 | 3 | `internal/converter/processor.go:71` | `RegisterProcessor` no normaliza la extensión a minúsculas. | Bajo: registrar `.DOCX` crearía una entrada inalcanzable. |
 | 4 | `internal/converter/processor.go:76-82` | `SupportedExtensions()` itera un map → **orden no determinista**. | Bajo: la lista de extensiones que muestra la CLI cambia entre ejecuciones. |
