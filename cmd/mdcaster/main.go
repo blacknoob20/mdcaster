@@ -259,7 +259,7 @@ func getIntegritySymbol(percent float64) string {
 	case percent >= 50:
 		return "🟠"
 	default:
-		return "🔴"
+		return "❌"
 	}
 }
 

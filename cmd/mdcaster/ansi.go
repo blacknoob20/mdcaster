@@ -82,6 +82,7 @@ var (
 	success   = style{styleCodes(sgrGreen, sgrBold)}
 	info      = style{styleCodes(sgrCyan)}
 	warning   = style{styleCodes(sgrYellow)}
+	orange    = style{styleCodes("38", "5", "208")}
 	errorMsg  = style{styleCodes(sgrRed, sgrBold)}
 	highlight = style{styleCodes(sgrMagenta, sgrBold)}
 )
