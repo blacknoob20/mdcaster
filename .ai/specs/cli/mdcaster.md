@@ -2,7 +2,7 @@
 
 **Módulo:** `cli/mdcaster`
 **Código:** `cmd/mdcaster/main.go`, `cmd/mdcaster/help.go`
-**Depende de:** `mdcaster/internal/converter`, `github.com/fatih/color`
+**Depende de:** `mdcaster/internal/converter`, `mdcaster/internal/version`
 
 ---
 
@@ -162,6 +162,9 @@ Reglas:
 1. El nombre se trunca a 40 caracteres: si es más largo, se corta a 37 y se añade `...`.
 2. Se usa `\r` al inicio de la línea para sobrescribir en consola.
 3. El formato del porcentaje es `%.1f%%` (un decimal).
+4. Con color habilitado, el símbolo y porcentaje de integridad usan el color semántico de su
+   umbral; el contador es gris, el nombre del archivo azul en negrita y el texto de éxito/error
+   verde/rojo. Sin color, el texto y su orden permanecen iguales.
 
 ## Símbolo de integridad — `getIntegritySymbol` (`cmd/mdcaster/main.go:248-259`)
 
@@ -196,7 +199,7 @@ Reglas:
 
 ## Color
 
-`cmd/mdcaster/ansi.go:81-87` define cinco estilos globales reutilizados en todo el binario:
+`cmd/mdcaster/ansi.go` define estilos globales reutilizados en todo el binario:
 
 | Variable | Color | Uso |
 |---|---|---|
@@ -206,6 +209,9 @@ Reglas:
 | `orange` | naranja (ANSI 256, 208) | indicador de integridad aceptable |
 | `errorMsg` | rojo bold | errores |
 | `highlight` | magenta bold | banner, títulos y métricas destacadas |
+| `pathStyle` | azul bold | nombres de archivo y rutas |
+| `muted` | gris | contadores y separadores |
+| `section` | azul bold | encabezados de la ayuda |
 
 El color sale de **códigos ANSI con la biblioteca estándar**, sin dependencias. Ver
 [decisión D11](../../../ARCHITECTURE.md#d11--cero-dependencias-externas).
@@ -223,6 +229,8 @@ Reglas:
    vacía (`cmd/mdcaster/ansi_other.go`).
 4. `style` expone `Print`, `Printf` y `Println` con la misma firma que usaba la librería anterior,
    de modo que las llamadas de la CLI no cambian.
+5. El progreso, las rutas, los encabezados de ayuda y las métricas usan estilos semánticos
+   compuestos. Al desactivar el color, no se emiten secuencias ANSI y se conserva el texto visible.
 
 ## `printHelp` — `cmd/mdcaster/help.go:9-45`
 

@@ -9,7 +9,7 @@ import (
 func printHelp() {
 	info.Println("Markdown Caster - Convertidor universal de múltiples formatos a Markdown")
 	fmt.Println()
-	fmt.Println("DESCRIPCIÓN:")
+	section.Println("DESCRIPCIÓN:")
 	fmt.Println("  Convierte archivos de múltiples formatos (DOCX, PDF, etc.) a formato Markdown")
 	fmt.Println("  utilizando procesamiento concurrente para máxima velocidad.")
 	fmt.Println("  Incluye verificación de integridad del contenido para garantizar que")
@@ -17,7 +17,7 @@ func printHelp() {
 	fmt.Println()
 	printUsage()
 	fmt.Println()
-	fmt.Println("OPCIONES:")
+	section.Println("OPCIONES:")
 	fmt.Println("  -i, --input    Archivo o carpeta con archivos soportados a convertir")
 	fmt.Println("  -o, --output   Carpeta de destino para archivos convertidos (default: 'converted')")
 	fmt.Println("  -w, --workers  Número de workers paralelos (default: número de CPUs)")
@@ -27,13 +27,13 @@ func printHelp() {
 	fmt.Println("      --version  Mostrar versión del programa")
 	fmt.Println("      --help     Mostrar esta ayuda")
 	fmt.Println()
-	fmt.Println("INDICADOR DE INTEGRIDAD:")
+	section.Println("INDICADOR DE INTEGRIDAD:")
 	success.Println("  🟢 Verde (≥95%)    - Integridad óptima")
 	warning.Println("  🟡 Amarillo (80%)  - Integridad buena")
 	orange.Println("  🟠 Naranja (50%)   - Integridad aceptable")
 	errorMsg.Println("  ❌ Rojo (<50%)     - Integridad deficiente")
 	fmt.Println()
-	fmt.Println("EJEMPLOS:")
+	section.Println("EJEMPLOS:")
 	fmt.Println("  # Convertir un archivo específico")
 	fmt.Println("  mdcaster -i documento.docx")
 	fmt.Println()
@@ -52,7 +52,7 @@ func printHelp() {
 
 // printUsage muestra el uso básico
 func printUsage() {
-	fmt.Println("USO:")
+	section.Println("USO:")
 	fmt.Println("  mdcaster -i <archivo|carpeta> [-o <carpeta_salida>] [-w <workers>]")
 	fmt.Println("  mdcaster <archivo|carpeta>")
 }

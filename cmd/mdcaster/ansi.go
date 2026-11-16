@@ -14,8 +14,10 @@ const (
 	sgrRed     = "31"
 	sgrGreen   = "32"
 	sgrYellow  = "33"
+	sgrBlue    = "34"
 	sgrMagenta = "35"
 	sgrCyan    = "36"
+	sgrGray    = "90"
 )
 
 // colorEnabled indica si la salida lleva color. Se decide una sola vez al
@@ -85,4 +87,7 @@ var (
 	orange    = style{styleCodes("38", "5", "208")}
 	errorMsg  = style{styleCodes(sgrRed, sgrBold)}
 	highlight = style{styleCodes(sgrMagenta, sgrBold)}
+	pathStyle = style{styleCodes(sgrBlue, sgrBold)}
+	muted     = style{styleCodes(sgrGray)}
+	section   = style{styleCodes(sgrBlue, sgrBold)}
 )

@@ -122,7 +122,7 @@ Entrada (.md)
 | `mdclean` sin `--tdr` | une líneas "envueltas" | `cmd/mdclean/generic.go:45-64` |
 | `mdclean` con `--tdr` | 9 etapas de normalización (7 pasadas y 2 sub-pasos) | `cmd/mdclean/tdr.go:26-39` |
 | Escritura `mdclean` | con salto de línea final garantizado | `cmd/mdclean/main.go:128-152` |
-| Color de la salida | códigos ANSI de la stdlib; se desactiva sin terminal, con `NO_COLOR` o `TERM=dumb` | `cmd/mdcaster/ansi.go:24-51` |
+| Color de la salida | códigos ANSI de la stdlib y estilos semánticos; se desactiva sin terminal, con `NO_COLOR` o `TERM=dumb` | `cmd/mdcaster/ansi.go:24-51` |
 | Versión del proyecto | SemVer en `internal/version.Version`: **fuente única de verdad** para los dos binarios | `internal/version/version.go:15` |
 
 ## Taxonomía de errores
